@@ -168,6 +168,14 @@ dynstr_set(char* dest, const char* src)
 }
 
 void
+dynstr_shrink(char* str, size_t amount) {
+    // clamp
+    amount = (amount > dynstr_len(str) ? dynstr_len(str) : amount);
+    array_header(str)->length -= amount;
+    str[array_len(str) - 1] = '\0';
+}
+
+void
 dynstr_clear(char* str)
 {
     array_len(str) = 1;

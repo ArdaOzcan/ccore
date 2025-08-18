@@ -112,6 +112,9 @@ void
 dynstr_clear(char* str);
 
 void
+dynstr_shrink(char* str, size_t amount);
+
+void
 dynstr_set(char * dest, const char * src);
 
 typedef enum
