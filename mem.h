@@ -32,6 +32,9 @@ typedef struct
 Arena
 arena_init(void* base, size_t size);
 
+Arena
+arena_init_aligned(void* base, size_t size, size_t alignment);
+
 void*
 arena_push_aligned(Arena* arena, size_t size, size_t alignment);
 
