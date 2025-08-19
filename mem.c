@@ -2,14 +2,17 @@
 
 #include <assert.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 #ifndef DEFAULT_ALIGNMENT
 #define DEFAULT_ALIGNMENT (2 * sizeof(void*))
 #endif
 
-uintptr_t
+static uintptr_t
 align_forward(uintptr_t ptr, size_t alignment)
 {
     assert((alignment & (alignment - 1)) == 0);
@@ -18,6 +21,89 @@ align_forward(uintptr_t ptr, size_t alignment)
         ptr += alignment - modulo;
     }
     return ptr;
+}
+
+int
+varena_init(VArena* arena, size_t size, size_t page_size, size_t alignment)
+{
+    const size_t SYSTEM_PAGE_SIZE = (size_t)sysconf(_SC_PAGESIZE);
+    assert(page_size % SYSTEM_PAGE_SIZE == 0);
+    void* base = mmap(NULL,
+                      size,
+                      PROT_NONE,
+                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
+                      -1,
+                      0);
+    if (base == MAP_FAILED) {
+        perror("mmap");
+        return 1;
+    }
+    printf("Reserved %zu bytes at %p\n", size, base);
+
+    // Guard page
+    void* guard_start = (uint8_t*)base + size - page_size;
+    if (mprotect(guard_start, page_size, PROT_NONE) != 0) {
+        perror("mprotect");
+        return 1;
+    }
+
+    printf(
+      "Guard Page committed at %p with size %zu.\n", guard_start, page_size);
+
+    arena->base = base;
+    arena->offset = 0;
+    arena->page_count = 0;
+    arena->page_size = page_size;
+    arena->size = size;
+    arena->alignment = alignment;
+
+    return 0;
+}
+
+int
+varena_commit_pages(VArena* varena, size_t amount)
+{
+    size_t committed = varena->page_count * varena->page_size;
+    if (committed + varena->page_size * amount >= varena->size) {
+        fprintf(stderr, "Allocation exceeds arena usable size!\n");
+        return 1;
+    }
+
+    void* start = (uint8_t*)varena->base + committed;
+
+    int err =
+      mprotect(start, varena->page_size * amount, PROT_READ | PROT_WRITE);
+    if (err != 0) {
+        perror("mprotect");
+        return 1;
+    }
+
+    printf("Page committed at %p with size %zu.\n", start, varena->page_size);
+    varena->page_count += amount;
+    return 0;
+}
+
+void*
+varena_alloc(VArena* varena, size_t size)
+{
+    printf("Allocating %zu bytes in arena.\n", size);
+    size_t start_offset = align_forward(varena->offset, varena->alignment);
+    size_t end_offset = start_offset + size;
+
+    size_t committed = varena->page_size * varena->page_count;
+    size_t bytes_needed = end_offset > committed ? end_offset - committed : 0;
+    size_t pages_needed =
+      (bytes_needed + varena->page_size - 1) / varena->page_size;
+
+    if (pages_needed > 0) {
+        int err = varena_commit_pages(varena, pages_needed);
+        if (err != 0)
+            return NULL;
+    }
+
+    varena->offset = end_offset;
+
+    return (uint8_t*)varena->base + start_offset;
 }
 
 Arena

@@ -29,6 +29,25 @@ typedef struct
     size_t alignment;
 } Arena;
 
+typedef struct
+{
+    void* base;
+    size_t page_size;
+    size_t page_count;
+    size_t offset;
+    size_t size;
+    size_t alignment;
+} VArena;
+
+int
+varena_init(VArena* arena, size_t size, size_t page_size, size_t alignment);
+
+int
+varena_commit_pages(VArena* varena, size_t amount);
+
+void*
+varena_alloc(VArena* varena, size_t size);
+
 Arena
 arena_init(void* base, size_t size);
 
