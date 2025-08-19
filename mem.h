@@ -74,7 +74,7 @@ void*
 array_ensure_capacity(void* arr, size_t added_count);
 
 #define array_append(a, v)                                                     \
-    ((a) = array_ensure_capacity(a, 1, sizeof(v)),                             \
+    ((a) = array_ensure_capacity(a, 1),                                        \
      (a)[array_len(a)] = (v),                                                  \
      &(a)[array_len(a)++])
 
