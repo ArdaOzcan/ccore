@@ -21,13 +21,20 @@ align_forward(uintptr_t ptr, size_t alignment)
 }
 
 Arena
-arena_init(void* base, size_t size)
+arena_init_aligned(void* base, size_t size, size_t alignment)
 {
     Arena arena;
     arena.base = base;
     arena.size = size;
+    arena.alignment = alignment;
     arena.used = 0;
     return arena;
+}
+
+Arena
+arena_init(void* base, size_t size)
+{
+    return arena_init_aligned(base, size, DEFAULT_ALIGNMENT);
 }
 
 void*
@@ -46,7 +53,7 @@ arena_push_aligned(Arena* arena, size_t size, size_t alignment)
 void*
 arena_push(Arena* a, size_t size)
 {
-    return arena_push_aligned(a, size, DEFAULT_ALIGNMENT);
+    return arena_push_aligned(a, size, a->alignment);
 }
 
 void

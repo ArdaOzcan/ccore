@@ -26,6 +26,7 @@ typedef struct
     void* base;
     size_t used;
     size_t size;
+    size_t alignment;
 } Arena;
 
 Arena
