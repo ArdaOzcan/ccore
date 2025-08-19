@@ -86,9 +86,10 @@ array_init(size_t item_size, size_t capacity, Allocator* allocator)
 }
 
 void*
-array_ensure_capacity(void* arr, size_t added_count, size_t item_size)
+array_ensure_capacity(void* arr, size_t added_count)
 {
     ArrayHeader* header = array_header(arr);
+    size_t item_size = header->item_size;
 
     size_t desired_capacity = header->length + added_count;
     if (desired_capacity > header->capacity) {

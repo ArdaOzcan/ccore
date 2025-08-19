@@ -71,7 +71,7 @@ array_init(size_t item_size, size_t capacity, Allocator* allocator);
 #define array_len(a) (array_header(a)->length)
 
 void*
-array_ensure_capacity(void* arr, size_t added_count, size_t item_size);
+array_ensure_capacity(void* arr, size_t added_count);
 
 #define array_append(a, v)                                                     \
     ((a) = array_ensure_capacity(a, 1, sizeof(v)),                             \
