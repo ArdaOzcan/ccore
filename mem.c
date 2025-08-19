@@ -141,7 +141,7 @@ dynstr_from_cstr(const char* cstr, size_t capacity, Allocator* allocator)
     size_t len = strlen(cstr);
 
     char* arr = array(char, capacity, allocator);
-    array_ensure_capacity(arr, len + 1, sizeof(char));
+    array_ensure_capacity(arr, len + 1);
     memcpy(arr, cstr, len);
     arr[len] = '\0';
 
@@ -160,7 +160,7 @@ dynstr_init(size_t capacity, Allocator* a)
 void
 dynstr_append_c(char* dest, char src)
 {
-    array_ensure_capacity(dest, 1, sizeof(char));
+    array_ensure_capacity(dest, 1);
     size_t dest_str_len = dynstr_len(dest);
     dest[dest_str_len] = src;
     dest[dest_str_len + 1] = '\0';
@@ -171,7 +171,7 @@ void
 dynstr_append(char* dest, const char* src)
 {
     size_t src_len = strlen(src);
-    array_ensure_capacity(dest, src_len, sizeof(char));
+    array_ensure_capacity(dest, src_len);
     size_t dest_str_len = dynstr_len(dest);
     array_header(dest)->length += src_len;
     memcpy(&dest[dest_str_len], src, src_len);
@@ -184,7 +184,7 @@ dynstr_set(char* dest, const char* src)
     size_t src_len = dynstr_len(src);
     int diff = src_len - dynstr_len(dest);
     if (diff > 0) {
-        array_ensure_capacity(dest, diff, sizeof(char));
+        array_ensure_capacity(dest, diff);
     }
 
     memcpy(dest, src, src_len);
