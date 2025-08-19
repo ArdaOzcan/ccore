@@ -1,8 +1,24 @@
 #include "mem.h"
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+
+#ifndef DEFAULT_ALIGNMENT
+#define DEFAULT_ALIGNMENT (2 * sizeof(void*))
+#endif
+
+uintptr_t
+align_forward(uintptr_t ptr, size_t alignment)
+{
+    assert((alignment & (alignment - 1)) == 0);
+    uintptr_t modulo = ptr & (alignment - 1);
+    if (modulo != 0) {
+        ptr += alignment - modulo;
+    }
+    return ptr;
+}
 
 Arena
 arena_init(void* base, size_t size)
@@ -15,8 +31,9 @@ arena_init(void* base, size_t size)
 }
 
 void*
-arena_push_size(Arena* arena, size_t size)
+arena_push_aligned(Arena* arena, size_t size, size_t alignment)
 {
+    arena->used = align_forward(arena->used, alignment);
     arena->used += size;
     if (arena->used > arena->size) {
         printf("Arena is full\n");
@@ -26,16 +43,22 @@ arena_push_size(Arena* arena, size_t size)
     return arena->base + arena->used - size;
 }
 
+void*
+arena_push(Arena* a, size_t size)
+{
+    return arena_push_aligned(a, size, DEFAULT_ALIGNMENT);
+}
+
 void
 arena_copy_size(Arena* arena, const void* data, size_t size)
 {
-    memcpy(arena_push_size(arena, size), data, size);
+    memcpy(arena_push(arena, size), data, size);
 }
 
 void*
 arena_alloc_(size_t bytes, void* context)
 {
-    return arena_push_size((Arena*)context, bytes);
+    return arena_push((Arena*)context, bytes);
 }
 
 void
@@ -168,7 +191,8 @@ dynstr_set(char* dest, const char* src)
 }
 
 void
-dynstr_shrink(char* str, size_t amount) {
+dynstr_shrink(char* str, size_t amount)
+{
     // clamp
     amount = (amount > dynstr_len(str) ? dynstr_len(str) : amount);
     array_header(str)->length -= amount;

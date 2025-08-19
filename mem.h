@@ -1,9 +1,9 @@
 #ifndef MEM_H
 #define MEM_H
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
-#include <stdbool.h>
 
 typedef uint8_t u8;
 typedef uint16_t u16;
@@ -32,10 +32,13 @@ Arena
 arena_init(void* base, size_t size);
 
 void*
-arena_push_size(Arena* arena, size_t size);
+arena_push_aligned(Arena* arena, size_t size, size_t alignment);
+
+void*
+arena_push(Arena* arena, size_t size);
 
 #define arena_push_array(arena, type, length)                                  \
-    (type*)arena_push_size(arena, sizeof(type) * length)
+    (type*)arena_push(arena, sizeof(type) * length)
 
 void
 arena_copy_size(Arena* arena, const void* data, size_t size);
@@ -49,7 +52,7 @@ arena_free_(size_t bytes, void* ptr, void* context);
 #define arena_alloc_init(arena)                                                \
     (Allocator)                                                                \
     {                                                                          \
-        arena_alloc_, arena_free_, arena                                         \
+        arena_alloc_, arena_free_, arena                                       \
     }
 
 typedef struct
@@ -90,7 +93,6 @@ array_ensure_capacity(void* arr, size_t added_count, size_t item_size);
 
 #define array_pop_back(a) (a[--array_header(a)->length])
 
-
 #define dynstr_len(str) (array_len(str) - 1)
 
 char*
@@ -103,10 +105,10 @@ char*
 dynstr_init(size_t capacity, Allocator* a);
 
 void
-dynstr_append_c(char * dest, char src);
+dynstr_append_c(char* dest, char src);
 
 void
-dynstr_append(char * dest, const char * src);
+dynstr_append(char* dest, const char* src);
 
 void
 dynstr_clear(char* str);
@@ -115,7 +117,7 @@ void
 dynstr_shrink(char* str, size_t amount);
 
 void
-dynstr_set(char * dest, const char * src);
+dynstr_set(char* dest, const char* src);
 
 typedef enum
   : u8
