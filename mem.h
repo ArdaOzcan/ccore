@@ -59,7 +59,7 @@ typedef struct
 {
     size_t capacity;
     size_t length;
-
+    size_t item_size;
     Allocator* allocator;
 } ArrayHeader;
 

@@ -77,6 +77,7 @@ array_init(size_t item_size, size_t capacity, Allocator* allocator)
         header->capacity = capacity;
         printf("Array initialized with capacity %zu\n", capacity);
         header->length = 0;
+        header->item_size = item_size;
         header->allocator = allocator;
         ptr = header + 1;
     }
