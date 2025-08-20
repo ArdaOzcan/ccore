@@ -89,6 +89,27 @@ align_forward(uintptr_t ptr, size_t alignment)
     return ptr;
 }
 
+static void
+varena_increase_capacity(VArena* varena, size_t size)
+{
+    size_t end_offset = varena->used + size;
+    size_t committed = varena->page_size * varena->page_count;
+    size_t bytes_needed = end_offset > committed ? end_offset - committed : 0;
+    size_t pages_needed =
+      (bytes_needed + varena->page_size - 1) / varena->page_size;
+
+    varena->used += size;
+
+    if (pages_needed == 0) {
+        return;
+    }
+
+    int err = varena_commit_pages(varena, pages_needed);
+    if (err != 0) {
+        printf("VArena: Error while committing pages.\n");
+    }
+}
+
 void*
 varena_push(VArena* varena, size_t size)
 {
@@ -97,18 +118,7 @@ varena_push(VArena* varena, size_t size)
     printf("Aligned from %zu to %zu.\n", varena->used, start_offset);
     size_t end_offset = start_offset + size;
 
-    size_t committed = varena->page_size * varena->page_count;
-    size_t bytes_needed = end_offset > committed ? end_offset - committed : 0;
-    size_t pages_needed =
-      (bytes_needed + varena->page_size - 1) / varena->page_size;
-
-    if (pages_needed > 0) {
-        int err = varena_commit_pages(varena, pages_needed);
-        if (err != 0)
-            return NULL;
-    }
-
-    varena->used = end_offset;
+    varena_increase_capacity(varena, end_offset - varena->used);
 
     return (uint8_t*)varena->base + start_offset;
 }
@@ -190,7 +200,7 @@ varena_realloc_(void* start, size_t old_size, size_t new_size, void* context)
     // If at the end of the arena, we can just push
     // the required size and return the original pointer.
     if (start + old_size == varena->base + varena->used) {
-        varena_push(varena, new_size - old_size);
+        varena_increase_capacity(varena, new_size - old_size);
         return start;
     } else {
         return varena_push(varena, new_size);
@@ -241,41 +251,45 @@ array_init(size_t item_size, size_t capacity, Allocator* allocator)
 void*
 array_ensure_capacity(void* arr, size_t added_count)
 {
-    ArrayHeader* header = array_header(arr);
-    size_t item_size = header->item_size;
+    ArrayHeader* old_header = array_header(arr);
 
-    size_t desired_capacity = header->length + added_count;
-    if (desired_capacity > header->capacity) {
-        // Realloc array
-        size_t new_capacity = 2 * header->capacity;
-        while (new_capacity < desired_capacity) {
-            new_capacity *= 2;
-        }
-
-        size_t old_size = sizeof(ArrayHeader) + header->capacity * item_size;
-        size_t new_size = sizeof(ArrayHeader) + new_capacity * item_size;
-        ArrayHeader* new_header = header->allocator->realloc(
-          header, old_size, new_size, header->allocator->context);
-
-        if (new_header) {
-            printf("Reallocing array from %zu bytes to %zu bytes.\n",
-                   old_size,
-                   new_size);
-            memcpy(new_header, header, old_size);
-
-            if (header->allocator->free) {
-                header->allocator->free(
-                  header, old_size, header->allocator->context);
-            }
-
-            new_header->capacity = new_capacity;
-            return new_header + 1;
-        } else {
-            return NULL;
-        }
+    size_t desired_capacity = old_header->length + added_count;
+    if (desired_capacity <= old_header->capacity) {
+        return arr;
     }
 
-    return arr;
+    // Realloc array
+    size_t new_capacity = 2 * old_header->capacity;
+    while (new_capacity < desired_capacity) {
+        new_capacity *= 2;
+    }
+
+    size_t old_size =
+      sizeof(ArrayHeader) + old_header->capacity * old_header->item_size;
+    size_t new_size =
+      sizeof(ArrayHeader) + new_capacity * old_header->item_size;
+    ArrayHeader* new_header = old_header->allocator->realloc(
+      old_header, old_size, new_size, old_header->allocator->context);
+
+    if (new_header == NULL) {
+        return NULL;
+    }
+
+    printf(
+      "Reallocing array from %zu bytes to %zu bytes.\n", old_size, new_size);
+
+    if (new_header != old_header) {
+        printf("Copied memory.\n");
+        memcpy(new_header, old_header, old_size);
+    }
+
+    if (old_header->allocator->free) {
+        old_header->allocator->free(
+          old_header, old_size, old_header->allocator->context);
+    }
+
+    new_header->capacity = new_capacity;
+    return new_header + 1;
 }
 
 char*
@@ -307,16 +321,6 @@ dynstr_init(size_t capacity, Allocator* a)
     array_append(arr, '\0');
 
     return arr;
-}
-
-void
-dynstr_append_c(char* dest, char src)
-{
-    array_ensure_capacity(dest, 1);
-    size_t dest_str_len = dynstr_len(dest);
-    dest[dest_str_len] = src;
-    dest[dest_str_len + 1] = '\0';
-    array_header(dest)->length += 1;
 }
 
 void
