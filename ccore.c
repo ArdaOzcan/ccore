@@ -1,20 +1,35 @@
 #include "ccore.h"
+#include "vmem.h"
 
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <sys/mman.h>
 #include <unistd.h>
+#endif
+
+size_t
+system_page_size()
+{
+#ifdef _WIN32
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    return si.dwPageSize;
+#else
+    return (size_t)sysconf(_SC_PAGESIZE);
+#endif
+}
 
 int
 varena_destroy(VArena* varena)
 {
-    if (munmap(varena->base, varena->size) != 0) {
-        perror("munmap");
-        return 1;
-    }
+    vmem_release(varena->base, varena->size);
 
     varena->base = NULL;
     varena->used = 0;
@@ -26,23 +41,15 @@ varena_destroy(VArena* varena)
 int
 varena_init(VArena* arena, size_t size)
 {
-    return varena_init_ex(arena, size, SYSTEM_PAGE_SIZE, DEFAULT_ALIGNMENT);
+    return varena_init_ex(arena, size, system_page_size(), DEFAULT_ALIGNMENT);
 }
 
 int
 varena_init_ex(VArena* arena, size_t size, size_t page_size, size_t alignment)
 {
-    assert(page_size % SYSTEM_PAGE_SIZE == 0);
-    void* base = mmap(NULL,
-                      size,
-                      PROT_NONE,
-                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
-                      -1,
-                      0);
-    if (base == MAP_FAILED) {
-        perror("mmap");
-        return 1;
-    }
+    assert(page_size % system_page_size() == 0);
+    void* base = vmem_reserve(size);
+
 #ifdef CCORE_VERBOSE
     printf("Reserved %zu bytes at %p\n", size, base);
 #endif
@@ -68,12 +75,7 @@ varena_commit_pages(VArena* varena, size_t amount)
 
     void* start = (uint8_t*)varena->base + committed;
 
-    int err =
-      mprotect(start, varena->page_size * amount, PROT_READ | PROT_WRITE);
-    if (err != 0) {
-        perror("mprotect");
-        return 1;
-    }
+    vmem_commit(start, varena->page_size);
 
 #ifdef CCORE_VERBOSE
     printf("Page committed at %p with size %zu.\n", start, varena->page_size);

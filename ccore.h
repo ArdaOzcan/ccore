@@ -1,13 +1,17 @@
-#ifndef CCORE_H
-#define CCORE_H
+#pragma once
 
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <sys/mman.h>
 #include <unistd.h>
+#endif
 
 typedef uint8_t u8;
 typedef uint16_t u16;
@@ -17,7 +21,6 @@ typedef uint32_t u32;
 #define MEGABYTE (1024ULL * 1024ULL)
 
 #define DEFAULT_ALIGNMENT (2 * sizeof(void*))
-#define SYSTEM_PAGE_SIZE ((size_t)sysconf(_SC_PAGESIZE))
 
 #define make(T, n, a) ((T*)((a)->alloc(sizeof(T) * n, (a)->context)))
 
@@ -49,11 +52,10 @@ typedef uint32_t u32;
 #define dynstr_append_c(dest, src)                                             \
     {                                                                          \
         (dest) = array_ensure_capacity(dest, 1);                               \
-        (dest)[(dynstr_len(dest))] = (src);                                      \
+        (dest)[(dynstr_len(dest))] = (src);                                    \
         (dest)[(dynstr_len(dest)) + 1] = '\0';                                 \
         (array_header((dest)))->length++;                                      \
     }
-
 
 typedef struct
 {
@@ -91,6 +93,9 @@ typedef struct
     size_t item_size;
     Allocator* allocator;
 } ArrayHeader;
+
+size_t
+system_page_size();
 
 Arena
 arena_init(void* base, size_t size);
@@ -196,5 +201,3 @@ hashmap_print(Hashmap* hashmap);
 
 size_t
 hashmap_len(Hashmap* hashmap);
-
-#endif // CCORE_H
