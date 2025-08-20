@@ -43,7 +43,9 @@ varena_init_ex(VArena* arena, size_t size, size_t page_size, size_t alignment)
         perror("mmap");
         return 1;
     }
+#ifdef CCORE_VERBOSE
     printf("Reserved %zu bytes at %p\n", size, base);
+#endif
 
     arena->base = base;
     arena->used = 0;
@@ -73,7 +75,9 @@ varena_commit_pages(VArena* varena, size_t amount)
         return 1;
     }
 
+#ifdef CCORE_VERBOSE
     printf("Page committed at %p with size %zu.\n", start, varena->page_size);
+#endif
     varena->page_count += amount;
     return 0;
 }
@@ -106,17 +110,19 @@ varena_increase_capacity(VArena* varena, size_t size)
 
     int err = varena_commit_pages(varena, pages_needed);
     if (err != 0) {
-        printf("VArena: Error while committing pages.\n");
+        fprintf(stderr, "VArena: Error while committing pages.\n");
     }
 }
 
 void*
 varena_push(VArena* varena, size_t size)
 {
-    printf("Allocating %zu bytes in arena.\n", size);
     size_t start_offset = align_forward(varena->used, varena->alignment);
-    printf("Aligned from %zu to %zu.\n", varena->used, start_offset);
     size_t end_offset = start_offset + size;
+#ifdef CCORE_VERBOSE
+    printf("Allocating %zu bytes in arena.\n", size);
+    printf("Aligned from %zu to %zu.\n", varena->used, start_offset);
+#endif
 
     varena_increase_capacity(varena, end_offset - varena->used);
 
@@ -244,7 +250,9 @@ array_init(size_t item_size, size_t capacity, Allocator* allocator)
     void* ptr = NULL;
     if (header) {
         header->capacity = capacity;
+#ifdef CCORE_VERBOSE
         printf("Array initialized with capacity %zu\n", capacity);
+#endif
         header->length = 0;
         header->item_size = item_size;
         header->allocator = allocator;
@@ -281,11 +289,15 @@ array_ensure_capacity(void* arr, size_t added_count)
         return NULL;
     }
 
+#ifdef CCORE_VERBOSE
     printf(
       "Reallocing array from %zu bytes to %zu bytes.\n", old_size, new_size);
+#endif
 
     if (new_header != old_header) {
+#ifdef CCORE_VERBOSE
         printf("Copied memory.\n");
+#endif
         memcpy(new_header, old_header, old_size);
     }
 
