@@ -75,7 +75,7 @@ varena_commit_pages(VArena* varena, size_t amount)
 
     void* start = (uint8_t*)varena->base + committed;
 
-    vmem_commit(start, varena->page_size);
+    vmem_commit(start, varena->page_size * amount);
 
 #ifdef CCORE_VERBOSE
     printf("Page committed at %p with size %zu.\n", start, varena->page_size);
