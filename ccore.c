@@ -130,7 +130,7 @@ varena_push(VArena* varena, size_t size)
 }
 
 void
-varena_copy_size(VArena* arena, const void* data, size_t size)
+varena_push_copy(VArena* arena, const void* data, size_t size)
 {
     memcpy(varena_push(arena, size), data, size);
 }
@@ -172,7 +172,7 @@ arena_push(Arena* a, size_t size)
 }
 
 void
-arena_copy_size(Arena* arena, const void* data, size_t size)
+arena_push_copy(Arena* arena, const void* data, size_t size)
 {
     memcpy(arena_push(arena, size), data, size);
 }

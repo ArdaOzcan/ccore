@@ -1,1 +1,5 @@
-test.c
+build/
+.cache
+main.c
+main
+compile_commands.json

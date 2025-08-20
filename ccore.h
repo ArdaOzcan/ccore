@@ -102,7 +102,7 @@ void*
 arena_push(Arena* arena, size_t size);
 
 void
-arena_copy_size(Arena* arena, const void* data, size_t size);
+arena_push_copy(Arena* arena, const void* data, size_t size);
 
 Allocator
 arena_allocator(Arena* arena);
@@ -117,7 +117,7 @@ void*
 varena_push(VArena* varena, size_t size);
 
 void
-varena_copy_size(VArena* arena, const void* data, size_t size);
+varena_push_copy(VArena* arena, const void* data, size_t size);
 
 int
 varena_destroy(VArena* arena);
