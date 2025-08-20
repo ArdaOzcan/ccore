@@ -116,6 +116,9 @@ varena_init_ex(VArena* arena, size_t size, size_t page_size, size_t alignment);
 void*
 varena_push(VArena* varena, size_t size);
 
+void
+varena_copy_size(VArena* arena, const void* data, size_t size);
+
 int
 varena_destroy(VArena* arena);
 

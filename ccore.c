@@ -123,6 +123,12 @@ varena_push(VArena* varena, size_t size)
     return (uint8_t*)varena->base + start_offset;
 }
 
+void
+varena_copy_size(VArena* arena, const void* data, size_t size)
+{
+    memcpy(varena_push(arena, size), data, size);
+}
+
 Arena
 arena_init_ex(void* base, size_t size, size_t alignment)
 {
