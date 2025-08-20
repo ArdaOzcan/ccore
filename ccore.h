@@ -97,11 +97,11 @@ typedef struct
 size_t
 system_page_size();
 
-Arena
-arena_init(void* base, size_t size);
+void
+arena_init(Arena* arena, void* base, size_t size);
 
-Arena
-arena_init_ex(void* base, size_t size, size_t alignment);
+void
+arena_init_ex(Arena* arena, void* base, size_t size, size_t alignment);
 
 void*
 arena_push(Arena* arena, size_t size);
@@ -181,13 +181,13 @@ typedef struct
 uint64_t
 hash_str(const char* key);
 
-Hashmap
-hashmap_init(size_t capacity, Allocator* allocator);
+void
+hashmap_init(Hashmap * hashmap, size_t capacity, Allocator* allocator);
 
 void
 hashmap_clear(Hashmap* hashmap);
 
-bool
+int
 hashmap_insert(Hashmap* hashmap, char* key, void* value);
 
 void*

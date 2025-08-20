@@ -137,21 +137,19 @@ varena_push_copy(VArena* arena, const void* data, size_t size)
     memcpy(varena_push(arena, size), data, size);
 }
 
-Arena
-arena_init_ex(void* base, size_t size, size_t alignment)
+void
+arena_init_ex(Arena* arena, void* base, size_t size, size_t alignment)
 {
-    Arena arena;
-    arena.base = base;
-    arena.size = size;
-    arena.alignment = alignment;
-    arena.used = 0;
-    return arena;
+    arena->base = base;
+    arena->size = size;
+    arena->alignment = alignment;
+    arena->used = 0;
 }
 
-Arena
-arena_init(void* base, size_t size)
+void
+arena_init(Arena* arena, void* base, size_t size)
 {
-    return arena_init_ex(base, size, DEFAULT_ALIGNMENT);
+    arena_init_ex(arena, base, size, DEFAULT_ALIGNMENT);
 }
 
 static void*
@@ -412,23 +410,21 @@ hashmap_clear(Hashmap* hashmap)
     hashmap->length = 0;
 }
 
-Hashmap
-hashmap_init(size_t capacity, Allocator* allocator)
+void
+hashmap_init(Hashmap * hashmap, size_t capacity, Allocator* allocator)
 {
-    Hashmap hashmap;
-    hashmap.records =
+    hashmap->records =
       allocator->alloc(sizeof(HashmapRecord) * capacity, allocator->context);
-    hashmap.capacity = capacity;
-    hashmap.length = 0;
-    for (int i = 0; i < hashmap.capacity; i++) {
-        hashmap.records[i].type = HASHMAP_RECORD_EMPTY;
-        hashmap.records[i].key = NULL;
-        hashmap.records[i].value = NULL;
+    hashmap->capacity = capacity;
+    hashmap->length = 0;
+    for (int i = 0; i < hashmap->capacity; i++) {
+        hashmap->records[i].type = HASHMAP_RECORD_EMPTY;
+        hashmap->records[i].key = NULL;
+        hashmap->records[i].value = NULL;
     }
-    return hashmap;
 }
 
-bool
+int
 hashmap_insert(Hashmap* hashmap, char* key, void* value)
 {
     if (value == NULL)
@@ -445,14 +441,14 @@ hashmap_insert(Hashmap* hashmap, char* key, void* value)
             record->value = value;
             record->type = HASHMAP_RECORD_FILLED;
             hashmap->length++;
-            return true;
+            return 0;
         } else if (record->type == HASHMAP_RECORD_FILLED &&
                    strcmp(record->key, key) == 0) {
-            return false;
+            return 1;
         }
     }
 
-    return false;
+    return 1;
 }
 
 void*
