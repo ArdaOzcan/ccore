@@ -1,4 +1,4 @@
-#include "mem.h"
+#include "ccore.h"
 
 #include <assert.h>
 #include <stdbool.h>
@@ -8,25 +8,30 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-#ifndef DEFAULT_ALIGNMENT
-#define DEFAULT_ALIGNMENT (2 * sizeof(void*))
-#endif
-
-static uintptr_t
-align_forward(uintptr_t ptr, size_t alignment)
+int
+varena_destroy(VArena* varena)
 {
-    assert((alignment & (alignment - 1)) == 0);
-    uintptr_t modulo = ptr & (alignment - 1);
-    if (modulo != 0) {
-        ptr += alignment - modulo;
+    if (munmap(varena->base, varena->size) != 0) {
+        perror("munmap");
+        return 1;
     }
-    return ptr;
+
+    varena->base = NULL;
+    varena->used = 0;
+    varena->page_count = 0;
+    varena->size = 0;
+    return 0;
 }
 
 int
-varena_init(VArena* arena, size_t size, size_t page_size, size_t alignment)
+varena_init(VArena* arena, size_t size)
 {
-    const size_t SYSTEM_PAGE_SIZE = (size_t)sysconf(_SC_PAGESIZE);
+    return varena_init_ex(arena, size, SYSTEM_PAGE_SIZE, DEFAULT_ALIGNMENT);
+}
+
+int
+varena_init_ex(VArena* arena, size_t size, size_t page_size, size_t alignment)
+{
     assert(page_size % SYSTEM_PAGE_SIZE == 0);
     void* base = mmap(NULL,
                       size,
@@ -40,18 +45,8 @@ varena_init(VArena* arena, size_t size, size_t page_size, size_t alignment)
     }
     printf("Reserved %zu bytes at %p\n", size, base);
 
-    // Guard page
-    void* guard_start = (uint8_t*)base + size - page_size;
-    if (mprotect(guard_start, page_size, PROT_NONE) != 0) {
-        perror("mprotect");
-        return 1;
-    }
-
-    printf(
-      "Guard Page committed at %p with size %zu.\n", guard_start, page_size);
-
     arena->base = base;
-    arena->offset = 0;
+    arena->used = 0;
     arena->page_count = 0;
     arena->page_size = page_size;
     arena->size = size;
@@ -60,12 +55,12 @@ varena_init(VArena* arena, size_t size, size_t page_size, size_t alignment)
     return 0;
 }
 
-int
+static int
 varena_commit_pages(VArena* varena, size_t amount)
 {
     size_t committed = varena->page_count * varena->page_size;
     if (committed + varena->page_size * amount >= varena->size) {
-        fprintf(stderr, "Allocation exceeds arena usable size!\n");
+        fprintf(stderr, "Allocation exceeds varena usable size!\n");
         return 1;
     }
 
@@ -83,11 +78,23 @@ varena_commit_pages(VArena* varena, size_t amount)
     return 0;
 }
 
+static uintptr_t
+align_forward(uintptr_t ptr, size_t alignment)
+{
+    assert((alignment & (alignment - 1)) == 0);
+    uintptr_t modulo = ptr & (alignment - 1);
+    if (modulo != 0) {
+        ptr += alignment - modulo;
+    }
+    return ptr;
+}
+
 void*
-varena_alloc(VArena* varena, size_t size)
+varena_push(VArena* varena, size_t size)
 {
     printf("Allocating %zu bytes in arena.\n", size);
-    size_t start_offset = align_forward(varena->offset, varena->alignment);
+    size_t start_offset = align_forward(varena->used, varena->alignment);
+    printf("Aligned from %zu to %zu.\n", varena->used, start_offset);
     size_t end_offset = start_offset + size;
 
     size_t committed = varena->page_size * varena->page_count;
@@ -101,13 +108,13 @@ varena_alloc(VArena* varena, size_t size)
             return NULL;
     }
 
-    varena->offset = end_offset;
+    varena->used = end_offset;
 
     return (uint8_t*)varena->base + start_offset;
 }
 
 Arena
-arena_init_aligned(void* base, size_t size, size_t alignment)
+arena_init_ex(void* base, size_t size, size_t alignment)
 {
     Arena arena;
     arena.base = base;
@@ -120,10 +127,10 @@ arena_init_aligned(void* base, size_t size, size_t alignment)
 Arena
 arena_init(void* base, size_t size)
 {
-    return arena_init_aligned(base, size, DEFAULT_ALIGNMENT);
+    return arena_init_ex(base, size, DEFAULT_ALIGNMENT);
 }
 
-void*
+static void*
 arena_push_aligned(Arena* arena, size_t size, size_t alignment)
 {
     arena->used = align_forward(arena->used, alignment);
@@ -148,15 +155,68 @@ arena_copy_size(Arena* arena, const void* data, size_t size)
     memcpy(arena_push(arena, size), data, size);
 }
 
-void*
+static void*
 arena_alloc_(size_t bytes, void* context)
 {
     return arena_push((Arena*)context, bytes);
 }
 
-void
-arena_free_(size_t bytes, void* ptr, void* context)
+static void*
+arena_realloc_(void* start, size_t old_size, size_t new_size, void* context)
 {
+    return arena_push((Arena*)context, new_size);
+}
+
+static void
+arena_free_(void* ptr, size_t bytes, void* context)
+{
+}
+
+static void*
+varena_alloc_(size_t bytes, void* context)
+{
+    return varena_push((VArena*)context, bytes);
+}
+
+static void
+varena_free_(void* ptr, size_t bytes, void* context)
+{
+}
+
+static void*
+varena_realloc_(void* start, size_t old_size, size_t new_size, void* context)
+{
+    VArena* varena = context;
+    // If at the end of the arena, we can just push
+    // the required size and return the original pointer.
+    if (start + old_size == varena->base + varena->used) {
+        varena_push(varena, new_size - old_size);
+        return start;
+    } else {
+        return varena_push(varena, new_size);
+    }
+}
+
+Allocator
+arena_allocator(Arena* arena)
+{
+    return (Allocator){
+        .alloc = arena_alloc_,
+        .realloc = arena_realloc_,
+        .free = arena_free_,
+        .context = arena,
+    };
+}
+
+Allocator
+varena_allocator(VArena* varena)
+{
+    return (Allocator){
+        .alloc = varena_alloc_,
+        .realloc = varena_realloc_,
+        .free = varena_free_,
+        .context = varena,
+    };
 }
 
 void*
@@ -192,13 +252,12 @@ array_ensure_capacity(void* arr, size_t added_count)
             new_capacity *= 2;
         }
 
+        size_t old_size = sizeof(ArrayHeader) + header->capacity * item_size;
         size_t new_size = sizeof(ArrayHeader) + new_capacity * item_size;
-        ArrayHeader* new_header =
-          header->allocator->alloc(new_size, header->allocator->context);
+        ArrayHeader* new_header = header->allocator->realloc(
+          header, old_size, new_size, header->allocator->context);
 
         if (new_header) {
-            size_t old_size =
-              sizeof(ArrayHeader) + header->capacity * item_size;
             printf("Reallocing array from %zu bytes to %zu bytes.\n",
                    old_size,
                    new_size);
@@ -206,7 +265,7 @@ array_ensure_capacity(void* arr, size_t added_count)
 
             if (header->allocator->free) {
                 header->allocator->free(
-                  old_size, header, header->allocator->context);
+                  header, old_size, header->allocator->context);
             }
 
             new_header->capacity = new_capacity;
@@ -322,7 +381,7 @@ void
 hashmap_clear(Hashmap* hashmap)
 {
     for (int i = 0; i < hashmap->capacity; i++) {
-        hashmap->records[i].type = EMPTY;
+        hashmap->records[i].type = HASHMAP_RECORD_EMPTY;
         hashmap->records[i].key = NULL;
         hashmap->records[i].value = NULL;
     }
@@ -338,7 +397,7 @@ hashmap_init(size_t capacity, Allocator* allocator)
     hashmap.capacity = capacity;
     hashmap.length = 0;
     for (int i = 0; i < hashmap.capacity; i++) {
-        hashmap.records[i].type = EMPTY;
+        hashmap.records[i].type = HASHMAP_RECORD_EMPTY;
         hashmap.records[i].key = NULL;
         hashmap.records[i].value = NULL;
     }
@@ -356,13 +415,15 @@ hashmap_insert(Hashmap* hashmap, char* key, void* value)
         HashmapRecord* record =
           &hashmap->records[(idx + i) % hashmap->capacity];
 
-        if (record->type == EMPTY || record->type == DELETED) {
+        if (record->type == HASHMAP_RECORD_EMPTY ||
+            record->type == HASHMAP_RECORD_DELETED) {
             record->key = key;
             record->value = value;
-            record->type = FILLED;
+            record->type = HASHMAP_RECORD_FILLED;
             hashmap->length++;
             return true;
-        } else if (record->type == FILLED && strcmp(record->key, key) == 0) {
+        } else if (record->type == HASHMAP_RECORD_FILLED &&
+                   strcmp(record->key, key) == 0) {
             return false;
         }
     }
@@ -377,10 +438,10 @@ hashmap_get(Hashmap* hashmap, char* key)
     for (int i = 0; i < hashmap->capacity; i++) {
         u16 idx = (hash + i) % hashmap->capacity;
         HashmapRecord* record = &hashmap->records[idx];
-        if (record->type == EMPTY) {
+        if (record->type == HASHMAP_RECORD_EMPTY) {
             return NULL;
         }
-        if (record->type == DELETED) {
+        if (record->type == HASHMAP_RECORD_DELETED) {
             continue;
         }
 
@@ -399,16 +460,16 @@ hashmap_delete(Hashmap* hashmap, char* key)
     for (int i = 0; i < hashmap->capacity; i++) {
         u16 idx = (hash + i) % hashmap->capacity;
         HashmapRecord* record = &hashmap->records[idx];
-        if (record->type == EMPTY) {
+        if (record->type == HASHMAP_RECORD_EMPTY) {
             return NULL;
         }
-        if (record->type == DELETED) {
+        if (record->type == HASHMAP_RECORD_DELETED) {
             continue;
         }
 
         if (strcmp(key, record->key) == 0) {
             void* temp = record->value;
-            record->type = DELETED;
+            record->type = HASHMAP_RECORD_DELETED;
             record->key = NULL;
             record->value = NULL;
             return temp;
@@ -424,7 +485,7 @@ hashmap_print(Hashmap* hashmap)
     printf("----START----\n");
     for (int i = 0; i < hashmap->capacity; i++) {
         HashmapRecord* record = &hashmap->records[i];
-        if (record->type == FILLED)
+        if (record->type == HASHMAP_RECORD_FILLED)
             printf("(%d) %s: %s\n", i, record->key, (char*)record->value);
     }
     printf("----END----\n");

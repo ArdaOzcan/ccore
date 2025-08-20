@@ -1,0 +1,193 @@
+#ifndef CCORE_H
+#define CCORE_H
+
+#include <assert.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <unistd.h>
+
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+
+#define KILOBYTE (1024ULL)
+#define MEGABYTE (1024ULL * 1024ULL)
+
+#define DEFAULT_ALIGNMENT (2 * sizeof(void*))
+#define SYSTEM_PAGE_SIZE ((size_t)sysconf(_SC_PAGESIZE))
+
+#define make(T, n, a) ((T*)((a)->alloc(sizeof(T) * n, (a)->context)))
+
+#define arena_push_array(arena, type, length)                                  \
+    (type*)arena_push(arena, sizeof(type) * length)
+
+#define array(type, cap, alloc) array_init(sizeof(type), cap, alloc)
+#define array_header(a) ((ArrayHeader*)(a) - 1)
+#define array_len(a) (array_header(a)->length)
+#define array_append(a, v)                                                     \
+    ((a) = array_ensure_capacity(a, 1),                                        \
+     (a)[array_len(a)] = (v),                                                  \
+     &(a)[array_len(a)++])
+#define array_remove(a, i)                                                     \
+    do {                                                                       \
+        ArrayHeader* h = array_header(a);                                      \
+        if (i == h->length - 1) {                                              \
+            h->length -= 1;                                                    \
+        } else if (h->length > 1) {                                            \
+            void* ptr = &a[i];                                                 \
+            void* last = &a[h->length - 1];                                    \
+            h->length -= 1;                                                    \
+            memcpy(ptr, last, sizeof(*a));                                     \
+        }                                                                      \
+    } while (0)
+#define array_pop_back(a) (a[--array_header(a)->length])
+
+#define dynstr_len(str) (array_len(str) - 1)
+
+
+typedef struct
+{
+    void* (*alloc)(size_t size, void* context);
+    void (*free)(void* ptr, size_t size, void* context);
+    void* (*realloc)(void* ptr,
+                     size_t old_size,
+                     size_t new_size,
+                     void* context);
+    void* context;
+} Allocator;
+
+typedef struct
+{
+    void* base;
+    size_t used;
+    size_t size;
+    size_t alignment;
+} Arena;
+
+typedef struct
+{
+    void* base;
+    size_t page_size;
+    size_t page_count;
+    size_t used;
+    size_t size;
+    size_t alignment;
+} VArena;
+
+typedef struct
+{
+    size_t capacity;
+    size_t length;
+    size_t item_size;
+    Allocator* allocator;
+} ArrayHeader;
+
+Arena
+arena_init(void* base, size_t size);
+
+Arena
+arena_init_ex(void* base, size_t size, size_t alignment);
+
+void*
+arena_push(Arena* arena, size_t size);
+
+void
+arena_copy_size(Arena* arena, const void* data, size_t size);
+
+Allocator
+arena_allocator(Arena* arena);
+
+int
+varena_init(VArena* arena, size_t size);
+
+int
+varena_init_ex(VArena* arena, size_t size, size_t page_size, size_t alignment);
+
+void*
+varena_push(VArena* varena, size_t size);
+
+int
+varena_destroy(VArena* arena);
+
+Allocator
+varena_allocator(VArena* varena);
+
+void*
+array_init(size_t item_size, size_t capacity, Allocator* allocator);
+
+void*
+array_ensure_capacity(void* arr, size_t added_count);
+
+char*
+cstr_from_dynstr(const char* src, Allocator* allocator);
+
+char*
+dynstr_from_cstr(const char* cstr, size_t capacity, Allocator* allocator);
+
+char*
+dynstr_init(size_t capacity, Allocator* a);
+
+void
+dynstr_append_c(char* dest, char src);
+
+void
+dynstr_append(char* dest, const char* src);
+
+void
+dynstr_clear(char* str);
+
+void
+dynstr_shrink(char* str, size_t amount);
+
+void
+dynstr_set(char* dest, const char* src);
+
+typedef enum
+{
+    HASHMAP_RECORD_FILLED,
+    HASHMAP_RECORD_EMPTY,
+    HASHMAP_RECORD_DELETED
+} HashmapRecordType;
+
+typedef struct
+{
+    HashmapRecordType type;
+    char* key;
+    void* value;
+} HashmapRecord;
+
+typedef struct
+{
+    HashmapRecord* records;
+    size_t capacity;
+    size_t length;
+} Hashmap;
+
+uint64_t
+hash_str(const char* key);
+
+Hashmap
+hashmap_init(size_t capacity, Allocator* allocator);
+
+void
+hashmap_clear(Hashmap* hashmap);
+
+bool
+hashmap_insert(Hashmap* hashmap, char* key, void* value);
+
+void*
+hashmap_get(Hashmap* hashmap, char* key);
+
+void*
+hashmap_delete(Hashmap* hashmap, char* key);
+
+void
+hashmap_print(Hashmap* hashmap);
+
+size_t
+hashmap_len(Hashmap* hashmap);
+
+#endif // CCORE_H
