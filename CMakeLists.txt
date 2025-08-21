@@ -10,7 +10,7 @@ option(BUILD_EXAMPLES "Build example executables" ON)
 if(BUILD_EXAMPLES)
     add_executable(ccore_example example/main.c)
     target_compile_definitions(ccore PRIVATE CCORE_VERBOSE=1)
-    target_link_libraries(example PRIVATE ccore)
+    target_link_libraries(ccore_example PRIVATE ccore)
 endif()
 
 add_compile_options(-Werror -Wall)
