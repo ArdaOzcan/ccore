@@ -9,7 +9,8 @@ main(void)
     const size_t arr_len = 1024;
     const size_t size = 1 * MEGABYTE;
     void* base = malloc(size);
-    Arena arena = arena_init(base, size);
+    Arena arena ={ 0 };
+    arena_init(&arena, base, size);
 
     printf("%zu, %zu\n", sizeof(int), DEFAULT_ALIGNMENT);
     Allocator allocator = arena_allocator(&arena);
