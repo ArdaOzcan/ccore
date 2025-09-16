@@ -477,7 +477,7 @@ hashmap_getn(Hashmap* hashmap, char* key, size_t key_len)
             continue;
         }
 
-        if (strcmp(key, record->key) == 0) {
+        if (strncmp(key, record->key, key_len) == 0) {
             return record->value;
         }
     }
