@@ -437,6 +437,33 @@ hashmap_init(Hashmap * hashmap, size_t capacity, Allocator* allocator)
 }
 
 int
+hashmap_insertn(Hashmap* hashmap, char* key, size_t key_len, void* value)
+{
+    if (value == NULL)
+        return false;
+
+    u16 idx = hash_strn(key, key_len) % hashmap->capacity;
+    for (int i = 0; i < hashmap->capacity; i++) {
+        HashmapRecord* record =
+          &hashmap->records[(idx + i) % hashmap->capacity];
+
+        if (record->type == HASHMAP_RECORD_EMPTY ||
+            record->type == HASHMAP_RECORD_DELETED) {
+            record->key = key;
+            record->value = value;
+            record->type = HASHMAP_RECORD_FILLED;
+            hashmap->length++;
+            return 0;
+        } else if (record->type == HASHMAP_RECORD_FILLED &&
+                   strncmp(record->key, key, key_len) == 0) {
+            return 1;
+        }
+    }
+
+    return 1;
+}
+
+int
 hashmap_insert(Hashmap* hashmap, char* key, void* value)
 {
     if (value == NULL)

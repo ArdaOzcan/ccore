@@ -188,6 +188,9 @@ void
 hashmap_clear(Hashmap* hashmap);
 
 int
+hashmap_insertn(Hashmap* hashmap, char* key, size_t key_len, void* value);
+
+int
 hashmap_insert(Hashmap* hashmap, char* key, void* value);
 
 void*
