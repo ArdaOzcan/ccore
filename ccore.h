@@ -194,6 +194,9 @@ void*
 hashmap_get(Hashmap* hashmap, char* key);
 
 void*
+hashmap_getn(Hashmap* hashmap, char* key, size_t key_len);
+
+void*
 hashmap_delete(Hashmap* hashmap, char* key);
 
 void

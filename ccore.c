@@ -399,6 +399,18 @@ hash_str(const char* key)
     return hash;
 }
 
+uint64_t
+hash_strn(const char* key, size_t len)
+{
+    uint64_t hash = FNV_OFFSET;
+    for (int i = 0; i < len; i++) {
+        hash ^= (uint64_t)(unsigned char)(key[i]);
+        hash *= FNV_PRIME;
+    }
+    return hash;
+}
+
+
 void
 hashmap_clear(Hashmap* hashmap)
 {
@@ -449,6 +461,28 @@ hashmap_insert(Hashmap* hashmap, char* key, void* value)
     }
 
     return 1;
+}
+
+void*
+hashmap_getn(Hashmap* hashmap, char* key, size_t key_len)
+{
+    u16 hash = hash_strn(key, key_len) % hashmap->capacity;
+    for (int i = 0; i < hashmap->capacity; i++) {
+        u16 idx = (hash + i) % hashmap->capacity;
+        HashmapRecord* record = &hashmap->records[idx];
+        if (record->type == HASHMAP_RECORD_EMPTY) {
+            return NULL;
+        }
+        if (record->type == HASHMAP_RECORD_DELETED) {
+            continue;
+        }
+
+        if (strcmp(key, record->key) == 0) {
+            return record->value;
+        }
+    }
+
+    return NULL;
 }
 
 void*
