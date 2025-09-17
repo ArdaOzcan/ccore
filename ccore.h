@@ -196,7 +196,10 @@ typedef struct
 } Hashmap;
 
 uint64_t
-hash_str(const char* key);
+hash_cstr(const char* key);
+
+uint64_t
+hash_bytes(const u8* key, size_t length);
 
 void
 hashmap_init(Hashmap* hashmap,
@@ -204,6 +207,11 @@ hashmap_init(Hashmap* hashmap,
              HashmapKeyEqualsFunction equals_fn,
              size_t capacity,
              Allocator* allocator);
+
+void
+hashmap_byte_string_init(Hashmap* hashmap,
+                         size_t capacity,
+                         Allocator* allocator);
 
 void
 hashmap_clear(Hashmap* hashmap);

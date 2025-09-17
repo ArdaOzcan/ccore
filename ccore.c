@@ -389,11 +389,22 @@ dynstr_clear(char* str)
 // Return 64-bit FNV-1a hash for key (NUL-terminated). See description:
 // https://en.wikipedia.org/wiki/Fowler–Noll–Vo_hash_function
 uint64_t
-hash_str(const char* key)
+hash_cstr(const char* key)
 {
     uint64_t hash = FNV_OFFSET;
     for (const char* p = key; *p; p++) {
         hash ^= (uint64_t)(unsigned char)(*p);
+        hash *= FNV_PRIME;
+    }
+    return hash;
+}
+
+uint64_t
+hash_bytes(const u8* key, size_t length)
+{
+    uint64_t hash = FNV_OFFSET;
+    for (size_t i = 0; i < length; i++) {
+        hash ^= (uint64_t)(unsigned char)(key[i]);
         hash *= FNV_PRIME;
     }
     return hash;
@@ -423,6 +434,37 @@ hashmap_init(Hashmap* hashmap,
     hashmap->length = 0;
     hashmap->hash_fn = hash_fn;
     hashmap->equals_fn = equals_fn;
+    for (int i = 0; i < hashmap->capacity; i++) {
+        hashmap->records[i].type = HASHMAP_RECORD_EMPTY;
+        hashmap->records[i].key = NULL;
+        hashmap->records[i].value = NULL;
+    }
+}
+
+uint64_t
+hash_byte_string(const void* byte_string)
+{
+    ByteString b = *(ByteString*)byte_string;
+    return hash_bytes((const u8*)b.ptr, b.length);
+}
+
+bool
+byte_string_equal(const void* first, const void* second)
+{
+    ByteString a = *(ByteString*)first;
+    ByteString b = *(ByteString*)second;
+    return a.length == b.length && memcmp(a.ptr, b.ptr, a.length);
+}
+
+void
+hashmap_byte_string_init(Hashmap* hashmap, size_t capacity, Allocator* allocator)
+{
+    hashmap->records =
+      allocator->alloc(sizeof(HashmapRecord) * capacity, allocator->context);
+    hashmap->capacity = capacity;
+    hashmap->length = 0;
+    hashmap->hash_fn = hash_byte_string;
+    hashmap->equals_fn = byte_string_equal;
     for (int i = 0; i < hashmap->capacity; i++) {
         hashmap->records[i].type = HASHMAP_RECORD_EMPTY;
         hashmap->records[i].key = NULL;
