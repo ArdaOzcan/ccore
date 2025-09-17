@@ -441,14 +441,14 @@ hashmap_init(Hashmap* hashmap,
     }
 }
 
-uint64_t
+static uint64_t
 hash_byte_string(const void* byte_string)
 {
     ByteString b = *(ByteString*)byte_string;
     return hash_bytes((const u8*)b.ptr, b.length);
 }
 
-bool
+static bool
 byte_string_equal(const void* first, const void* second)
 {
     ByteString a = *(ByteString*)first;
@@ -457,7 +457,9 @@ byte_string_equal(const void* first, const void* second)
 }
 
 void
-hashmap_byte_string_init(Hashmap* hashmap, size_t capacity, Allocator* allocator)
+hashmap_byte_string_init(Hashmap* hashmap,
+                         size_t capacity,
+                         Allocator* allocator)
 {
     hashmap->records =
       allocator->alloc(sizeof(HashmapRecord) * capacity, allocator->context);
