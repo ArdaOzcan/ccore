@@ -399,18 +399,6 @@ hash_str(const char* key)
     return hash;
 }
 
-uint64_t
-hash_strn(const char* key, size_t len)
-{
-    uint64_t hash = FNV_OFFSET;
-    for (int i = 0; i < len; i++) {
-        hash ^= (uint64_t)(unsigned char)(key[i]);
-        hash *= FNV_PRIME;
-    }
-    return hash;
-}
-
-
 void
 hashmap_clear(Hashmap* hashmap)
 {
@@ -423,12 +411,18 @@ hashmap_clear(Hashmap* hashmap)
 }
 
 void
-hashmap_init(Hashmap * hashmap, size_t capacity, Allocator* allocator)
+hashmap_init(Hashmap* hashmap,
+             HashFunction hash_fn,
+             HashmapKeyEqualsFunction equals_fn,
+             size_t capacity,
+             Allocator* allocator)
 {
     hashmap->records =
       allocator->alloc(sizeof(HashmapRecord) * capacity, allocator->context);
     hashmap->capacity = capacity;
     hashmap->length = 0;
+    hashmap->hash_fn = hash_fn;
+    hashmap->equals_fn = equals_fn;
     for (int i = 0; i < hashmap->capacity; i++) {
         hashmap->records[i].type = HASHMAP_RECORD_EMPTY;
         hashmap->records[i].key = NULL;
@@ -437,12 +431,12 @@ hashmap_init(Hashmap * hashmap, size_t capacity, Allocator* allocator)
 }
 
 int
-hashmap_insertn(Hashmap* hashmap, char* key, size_t key_len, void* value)
+hashmap_insert(Hashmap* hashmap, void* key, void* value)
 {
     if (value == NULL)
         return false;
 
-    u16 idx = hash_strn(key, key_len) % hashmap->capacity;
+    u16 idx = hashmap->hash_fn(key) % hashmap->capacity;
     for (int i = 0; i < hashmap->capacity; i++) {
         HashmapRecord* record =
           &hashmap->records[(idx + i) % hashmap->capacity];
@@ -455,34 +449,7 @@ hashmap_insertn(Hashmap* hashmap, char* key, size_t key_len, void* value)
             hashmap->length++;
             return 0;
         } else if (record->type == HASHMAP_RECORD_FILLED &&
-                   strncmp(record->key, key, key_len) == 0) {
-            return 1;
-        }
-    }
-
-    return 1;
-}
-
-int
-hashmap_insert(Hashmap* hashmap, char* key, void* value)
-{
-    if (value == NULL)
-        return false;
-
-    u16 idx = hash_str(key) % hashmap->capacity;
-    for (int i = 0; i < hashmap->capacity; i++) {
-        HashmapRecord* record =
-          &hashmap->records[(idx + i) % hashmap->capacity];
-
-        if (record->type == HASHMAP_RECORD_EMPTY ||
-            record->type == HASHMAP_RECORD_DELETED) {
-            record->key = key;
-            record->value = value;
-            record->type = HASHMAP_RECORD_FILLED;
-            hashmap->length++;
-            return 0;
-        } else if (record->type == HASHMAP_RECORD_FILLED &&
-                   strcmp(record->key, key) == 0) {
+                   hashmap->equals_fn(record->key, key)) {
             return 1;
         }
     }
@@ -491,9 +458,9 @@ hashmap_insert(Hashmap* hashmap, char* key, void* value)
 }
 
 void*
-hashmap_getn(Hashmap* hashmap, char* key, size_t key_len)
+hashmap_get(Hashmap* hashmap, void* key)
 {
-    u16 hash = hash_strn(key, key_len) % hashmap->capacity;
+    u16 hash = hashmap->hash_fn(key) % hashmap->capacity;
     for (int i = 0; i < hashmap->capacity; i++) {
         u16 idx = (hash + i) % hashmap->capacity;
         HashmapRecord* record = &hashmap->records[idx];
@@ -504,7 +471,7 @@ hashmap_getn(Hashmap* hashmap, char* key, size_t key_len)
             continue;
         }
 
-        if (strncmp(key, record->key, key_len) == 0) {
+        if (hashmap->equals_fn(key, record->key)) {
             return record->value;
         }
     }
@@ -513,9 +480,9 @@ hashmap_getn(Hashmap* hashmap, char* key, size_t key_len)
 }
 
 void*
-hashmap_get(Hashmap* hashmap, char* key)
+hashmap_delete(Hashmap* hashmap, void* key)
 {
-    u16 hash = hash_str(key) % hashmap->capacity;
+    u16 hash = hashmap->hash_fn(key) % hashmap->capacity;
     for (int i = 0; i < hashmap->capacity; i++) {
         u16 idx = (hash + i) % hashmap->capacity;
         HashmapRecord* record = &hashmap->records[idx];
@@ -526,29 +493,7 @@ hashmap_get(Hashmap* hashmap, char* key)
             continue;
         }
 
-        if (strcmp(key, record->key) == 0) {
-            return record->value;
-        }
-    }
-
-    return NULL;
-}
-
-void*
-hashmap_delete(Hashmap* hashmap, char* key)
-{
-    u16 hash = hash_str(key) % hashmap->capacity;
-    for (int i = 0; i < hashmap->capacity; i++) {
-        u16 idx = (hash + i) % hashmap->capacity;
-        HashmapRecord* record = &hashmap->records[idx];
-        if (record->type == HASHMAP_RECORD_EMPTY) {
-            return NULL;
-        }
-        if (record->type == HASHMAP_RECORD_DELETED) {
-            continue;
-        }
-
-        if (strcmp(key, record->key) == 0) {
+        if (hashmap->equals_fn(key, record->key)) {
             void* temp = record->value;
             record->type = HASHMAP_RECORD_DELETED;
             record->key = NULL;

@@ -157,6 +157,18 @@ dynstr_shrink(char* str, size_t amount);
 void
 dynstr_set(char* dest, const char* src);
 
+typedef struct
+{
+    const char* ptr;
+    size_t length;
+} ByteString;
+
+ByteString
+byte_string_make(const char* str);
+
+bool
+byte_string_equals(ByteString first, ByteString second);
+
 typedef enum
 {
     HASHMAP_RECORD_FILLED,
@@ -171,9 +183,14 @@ typedef struct
     void* value;
 } HashmapRecord;
 
+typedef uint64_t (*HashFunction)(const void*);
+typedef bool (*HashmapKeyEqualsFunction)(const void*, const void*);
+
 typedef struct
 {
     HashmapRecord* records;
+    HashFunction hash_fn;
+    HashmapKeyEqualsFunction equals_fn;
     size_t capacity;
     size_t length;
 } Hashmap;
@@ -182,25 +199,23 @@ uint64_t
 hash_str(const char* key);
 
 void
-hashmap_init(Hashmap * hashmap, size_t capacity, Allocator* allocator);
+hashmap_init(Hashmap* hashmap,
+             HashFunction hash_fn,
+             HashmapKeyEqualsFunction equals_fn,
+             size_t capacity,
+             Allocator* allocator);
 
 void
 hashmap_clear(Hashmap* hashmap);
 
 int
-hashmap_insertn(Hashmap* hashmap, char* key, size_t key_len, void* value);
-
-int
-hashmap_insert(Hashmap* hashmap, char* key, void* value);
+hashmap_insert(Hashmap* hashmap, void* key, void* value);
 
 void*
-hashmap_get(Hashmap* hashmap, char* key);
+hashmap_get(Hashmap* hashmap, void* key);
 
 void*
-hashmap_getn(Hashmap* hashmap, char* key, size_t key_len);
-
-void*
-hashmap_delete(Hashmap* hashmap, char* key);
+hashmap_delete(Hashmap* hashmap, void* key);
 
 void
 hashmap_print(Hashmap* hashmap);
