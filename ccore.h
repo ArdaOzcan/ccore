@@ -223,6 +223,9 @@ void*
 hashmap_get(Hashmap* hashmap, void* key);
 
 void*
+hashmap_byte_string_get(Hashmap* hashmap, ByteString key);
+
+void*
 hashmap_delete(Hashmap* hashmap, void* key);
 
 void
