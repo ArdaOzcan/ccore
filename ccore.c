@@ -382,6 +382,12 @@ dynstr_clear(char* str)
     str[0] = '\0';
 }
 
+ByteString
+byte_string_from_cstr(const char* str)
+{
+    return (ByteString){ .ptr = str, .length = strlen(str) };
+}
+
 #define FNV_OFFSET 14695981039346656037UL
 #define FNV_PRIME 1099511628211UL
 
@@ -389,7 +395,7 @@ dynstr_clear(char* str)
 // Return 64-bit FNV-1a hash for key (NUL-terminated). See description:
 // https://en.wikipedia.org/wiki/Fowler–Noll–Vo_hash_function
 uint64_t
-hash_cstr(const char* key)
+cstr_hash(const char* key)
 {
     uint64_t hash = FNV_OFFSET;
     for (const char* p = key; *p; p++) {
@@ -400,7 +406,7 @@ hash_cstr(const char* key)
 }
 
 uint64_t
-hash_bytes(const u8* key, size_t length)
+bytes_hash(const u8* key, size_t length)
 {
     uint64_t hash = FNV_OFFSET;
     for (size_t i = 0; i < length; i++) {
@@ -442,10 +448,10 @@ hashmap_init(Hashmap* hashmap,
 }
 
 static uint64_t
-hash_byte_string(const void* byte_string)
+byte_string_hash(const void* byte_string)
 {
     ByteString b = *(ByteString*)byte_string;
-    return hash_bytes((const u8*)b.ptr, b.length);
+    return bytes_hash((const u8*)b.ptr, b.length);
 }
 
 static bool
@@ -465,7 +471,7 @@ hashmap_byte_string_init(Hashmap* hashmap,
       allocator->alloc(sizeof(HashmapRecord) * capacity, allocator->context);
     hashmap->capacity = capacity;
     hashmap->length = 0;
-    hashmap->hash_fn = hash_byte_string;
+    hashmap->hash_fn = byte_string_hash;
     hashmap->equals_fn = byte_string_equal;
     for (int i = 0; i < hashmap->capacity; i++) {
         hashmap->records[i].type = HASHMAP_RECORD_EMPTY;
@@ -516,6 +522,28 @@ hashmap_get(Hashmap* hashmap, void* key)
         }
 
         if (hashmap->equals_fn(key, record->key)) {
+            return record->value;
+        }
+    }
+
+    return NULL;
+}
+
+void*
+hashmap_byte_string_get(Hashmap* hashmap, ByteString key)
+{
+    u16 hash = byte_string_hash(&key) % hashmap->capacity;
+    for (int i = 0; i < hashmap->capacity; i++) {
+        u16 idx = (hash + i) % hashmap->capacity;
+        HashmapRecord* record = &hashmap->records[idx];
+        if (record->type == HASHMAP_RECORD_EMPTY) {
+            return NULL;
+        }
+        if (record->type == HASHMAP_RECORD_DELETED) {
+            continue;
+        }
+
+        if (byte_string_equal(&key, &record->key)) {
             return record->value;
         }
     }

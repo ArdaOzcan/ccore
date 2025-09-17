@@ -164,7 +164,7 @@ typedef struct
 } ByteString;
 
 ByteString
-byte_string_make(const char* str);
+byte_string_from_cstr(const char* str);
 
 bool
 byte_string_equals(ByteString first, ByteString second);
@@ -196,10 +196,10 @@ typedef struct
 } Hashmap;
 
 uint64_t
-hash_cstr(const char* key);
+cstr_hash(const char* key);
 
 uint64_t
-hash_bytes(const u8* key, size_t length);
+bytes_hash(const u8* key, size_t length);
 
 void
 hashmap_init(Hashmap* hashmap,
