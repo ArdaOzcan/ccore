@@ -93,7 +93,7 @@ example_hashmap_byte_string(void)
 }
 
 int
-main(void)
+example_array_copy(void)
 {
     VArena varena = { 0 };
     varena_init(&varena, 1 << 16);
@@ -108,4 +108,34 @@ main(void)
         assert(original_arr[i] == copy_arr[i]);
         printf("[%u]: %u == %u\n", i, original_arr[i], copy_arr[i]);
     }
+
+    return 0;
+}
+
+
+int main(void) {
+    VArena varena = { 0 };
+    varena_init(&varena, 1 << 16);
+    Allocator allocator = varena_allocator(&varena);
+    u8* array_a = array(u8, 32, &allocator);
+    for (uint i = 0; i < 25; i++) {
+        array_append(array_a, rand() % 256);
+    }
+    u8* array_b = array(u8, 32, &allocator);
+    for (uint i = 0; i < 25; i++) {
+        array_append(array_b, rand() % 256);
+    }
+
+    printf("B before assignment:\n");
+    for (uint i = 0; i < array_len(array_b); i++) {
+        printf("[%u]: %u\n", i, array_b[i]);
+    }
+    array_assign(array_b, array_a);
+
+    for (uint i = 0; i < array_len(array_a); i++) {
+        assert(array_a[i] == array_b[i]);
+        printf("[%u]: %u == %u\n", i, array_a[i], array_b[i]);
+    }
+
+    return 0;
 }

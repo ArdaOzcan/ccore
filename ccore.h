@@ -133,6 +133,9 @@ varena_allocator(VArena* varena);
 void*
 array_init(size_t item_size, size_t capacity, Allocator* allocator);
 
+void
+array_assign(void* dest, const void* src);
+
 void*
 array_copy(const void * original, Allocator* allocator);
 

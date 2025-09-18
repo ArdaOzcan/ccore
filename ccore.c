@@ -262,6 +262,18 @@ array_init(size_t item_size, size_t capacity, Allocator* allocator)
     return ptr;
 }
 
+void
+array_assign(void* dest, const void* src)
+{
+    int added_count = array_len(src) - array_len(dest);
+    if (added_count >= 0) {
+        array_ensure_capacity(dest, added_count);
+    }
+
+    memcpy(dest, src, array_header(src)->item_size * array_len(src));
+    array_len(dest) = array_len(src);
+}
+
 void*
 array_copy(const void* original, Allocator* allocator)
 {
