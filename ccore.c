@@ -263,6 +263,19 @@ array_init(size_t item_size, size_t capacity, Allocator* allocator)
 }
 
 void*
+array_copy(const void* original, Allocator* allocator)
+{
+    ArrayHeader original_header = *array_header(original);
+    size_t copy_size = original_header.item_size * original_header.length;
+    void* result = array_init(sizeof(uint8_t), copy_size, allocator);
+    memcpy(result, original, copy_size);
+    ArrayHeader* result_header = array_header(result);
+    *result_header = *array_header(original);
+
+    return result;
+}
+
+void*
 array_ensure_capacity(void* arr, size_t added_count)
 {
     ArrayHeader* old_header = array_header(arr);

@@ -134,6 +134,9 @@ void*
 array_init(size_t item_size, size_t capacity, Allocator* allocator);
 
 void*
+array_copy(const void * original, Allocator* allocator);
+
+void*
 array_ensure_capacity(void* arr, size_t added_count);
 
 char*

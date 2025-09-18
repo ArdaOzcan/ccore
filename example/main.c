@@ -1,4 +1,5 @@
 #include "ccore.h"
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -56,7 +57,7 @@ arena_example(void)
 }
 
 int
-main(void)
+example_hashmap_byte_string(void)
 {
     ByteString bytes = byte_string_from_cstr("This is testing string!");
     printf("ByteString \"%.*s\" created with length %zu\n",
@@ -81,7 +82,7 @@ main(void)
     int* lookup_val = (int*)hashmap_byte_string_get(
       &hashmap, byte_string_from_cstr("This is testing string!"));
 
-    if(lookup_val == NULL) {
+    if (lookup_val == NULL) {
         fprintf(stderr, "Lookup value was not found\n");
         return 1;
     }
@@ -89,4 +90,22 @@ main(void)
     printf("Lookup value was: %d\n", *lookup_val);
 
     return 0;
+}
+
+int
+main(void)
+{
+    VArena varena = { 0 };
+    varena_init(&varena, 1 << 16);
+    Allocator allocator = varena_allocator(&varena);
+    u8* original_arr = array(u8, 32, &allocator);
+    for (uint i = 0; i < 25; i++) {
+        array_append(original_arr, rand() % 256);
+    }
+    u8* copy_arr = array_copy(original_arr, &allocator);
+
+    for (uint i = 0; i < array_len(original_arr); i++) {
+        assert(original_arr[i] == copy_arr[i]);
+        printf("[%u]: %u == %u\n", i, original_arr[i], copy_arr[i]);
+    }
 }
