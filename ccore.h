@@ -179,7 +179,7 @@ typedef enum
 typedef struct
 {
     HashmapRecordType type;
-    char* key;
+    void* key;
     void* value;
 } HashmapRecord;
 

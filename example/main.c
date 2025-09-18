@@ -1,9 +1,10 @@
 #include "ccore.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 int
-main(void)
+arena_example(void)
 {
     printf("----REGULAR ARENA----\n");
     const size_t arr_len = 1024;
@@ -51,4 +52,41 @@ main(void)
     }
 
     printf("%s\n", str);
+    return 0;
+}
+
+int
+main(void)
+{
+    ByteString bytes = byte_string_from_cstr("This is testing string!");
+    printf("ByteString \"%.*s\" created with length %zu\n",
+           (int)bytes.length,
+           bytes.ptr,
+           bytes.length);
+    Hashmap hashmap = { 0 };
+    VArena varena = { 0 };
+    varena_init(&varena, 1 << 16);
+    Allocator alloc = varena_allocator(&varena);
+    hashmap_byte_string_init(&hashmap, 16, &alloc);
+    printf("Hashmap initialized.\n");
+    hashmap_print(&hashmap);
+
+    int val = 1345;
+    hashmap_insert(&hashmap, &bytes, &val);
+
+    printf(
+      "Inserted key-value pair %.*s : %d\n", (int)bytes.length, bytes.ptr, val);
+    hashmap_print(&hashmap);
+
+    int* lookup_val = (int*)hashmap_byte_string_get(
+      &hashmap, byte_string_from_cstr("This is testing string!"));
+
+    if(lookup_val == NULL) {
+        fprintf(stderr, "Lookup value was not found\n");
+        return 1;
+    }
+
+    printf("Lookup value was: %d\n", *lookup_val);
+
+    return 0;
 }

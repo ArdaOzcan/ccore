@@ -459,7 +459,7 @@ byte_string_equal(const void* first, const void* second)
 {
     ByteString a = *(ByteString*)first;
     ByteString b = *(ByteString*)second;
-    return a.length == b.length && memcmp(a.ptr, b.ptr, a.length);
+    return a.length == b.length && memcmp(a.ptr, b.ptr, a.length) == 0;
 }
 
 void
@@ -543,7 +543,7 @@ hashmap_byte_string_get(Hashmap* hashmap, ByteString key)
             continue;
         }
 
-        if (byte_string_equal(&key, &record->key)) {
+        if (byte_string_equal(&key, record->key)) {
             return record->value;
         }
     }
