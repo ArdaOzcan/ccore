@@ -18,7 +18,8 @@ arena_example(void)
     Allocator allocator = arena_allocator(&arena);
     int* arr = array(int, 16, &allocator);
     size_t old_used = 0;
-    for (int i = 0; i < arr_len; i++) {
+    size_t i = 0;
+    for (i = 0; i < arr_len; i++) {
         array_append(arr, i);
         if (arena.used != old_used) {
             printf("Arena used: %zu/%zu\n", arena.used, arena.size);
@@ -38,7 +39,7 @@ arena_example(void)
     Allocator vallocator = varena_allocator(&varena);
     int* varr = array(int, 16, &vallocator);
     size_t old_offset = 0;
-    for (int i = 0; i < arr_len; i++) {
+    for (i = 0; i < arr_len; i++) {
         array_append(varr, i);
         if (varena.used != old_offset) {
             printf("VArena used: %zu/%zu\n", varena.used, varena.size);
@@ -48,8 +49,8 @@ arena_example(void)
 
     printf("----DYNAMIC STRING----\n");
     char* str = dynstr_init(8, &vallocator);
-    for (int j = 0; j < 43; j++) {
-        dynstr_append_c(str, '0' + j);
+    for (i = 0; i < 43; i++) {
+        dynstr_append_c(str, '0' + i);
     }
 
     printf("%s\n", str);
@@ -97,42 +98,45 @@ example_array_copy(void)
     varena_init(&varena, 1 << 16);
     Allocator allocator = varena_allocator(&varena);
     u8* original_arr = array(u8, 32, &allocator);
-    for (uint i = 0; i < 25; i++) {
+    size_t i = 0;
+    for (i = 0; i < 25; i++) {
         array_append(original_arr, rand() % 256);
     }
     u8* copy_arr = array_copy(original_arr, &allocator);
 
-    for (uint i = 0; i < array_len(original_arr); i++) {
+    for (i = 0; i < array_len(original_arr); i++) {
         assert(original_arr[i] == copy_arr[i]);
-        printf("[%u]: %u == %u\n", i, original_arr[i], copy_arr[i]);
+        printf("[%lu]: %u == %u\n", i, original_arr[i], copy_arr[i]);
     }
 
     return 0;
 }
 
-
-int main(void) {
+int
+main(void)
+{
     VArena varena = { 0 };
     varena_init(&varena, 1 << 16);
     Allocator allocator = varena_allocator(&varena);
     u8* array_a = array(u8, 32, &allocator);
-    for (uint i = 0; i < 25; i++) {
+    size_t i = 0;
+    for (i = 0; i < 25; i++) {
         array_append(array_a, rand() % 256);
     }
     u8* array_b = array(u8, 32, &allocator);
-    for (uint i = 0; i < 25; i++) {
+    for (i = 0; i < 25; i++) {
         array_append(array_b, rand() % 256);
     }
 
     printf("B before assignment:\n");
-    for (uint i = 0; i < array_len(array_b); i++) {
-        printf("[%u]: %u\n", i, array_b[i]);
+    for (i = 0; i < array_len(array_b); i++) {
+        printf("[%lu]: %u\n", i, array_b[i]);
     }
     array_assign(array_b, array_a);
 
-    for (uint i = 0; i < array_len(array_a); i++) {
+    for (i = 0; i < array_len(array_a); i++) {
         assert(array_a[i] == array_b[i]);
-        printf("[%u]: %u == %u\n", i, array_a[i], array_b[i]);
+        printf("[%lu]: %u == %u\n", i, array_a[i], array_b[i]);
     }
 
     return 0;

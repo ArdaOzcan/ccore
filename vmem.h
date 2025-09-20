@@ -7,7 +7,7 @@
 #include <sys/mman.h>
 #endif
 
-static inline void* vmem_reserve(size_t size) {
+static void* vmem_reserve(size_t size) {
 #ifdef _WIN32
     return VirtualAlloc(NULL, size, MEM_RESERVE, PAGE_NOACCESS);
 #else
@@ -17,7 +17,7 @@ static inline void* vmem_reserve(size_t size) {
 #endif
 }
 
-static inline int vmem_commit(void* ptr, size_t size) {
+static int vmem_commit(void* ptr, size_t size) {
 #ifdef _WIN32
     return VirtualAlloc(ptr, size, MEM_COMMIT, PAGE_READWRITE) != NULL;
 #else
@@ -25,7 +25,7 @@ static inline int vmem_commit(void* ptr, size_t size) {
 #endif
 }
 
-static inline int vmem_decommit(void* ptr, size_t size) {
+static int vmem_decommit(void* ptr, size_t size) {
 #ifdef _WIN32
     return VirtualFree(ptr, size, MEM_DECOMMIT) != 0;
 #else
@@ -33,7 +33,7 @@ static inline int vmem_decommit(void* ptr, size_t size) {
 #endif
 }
 
-static inline void vmem_release(void* ptr, size_t size) {
+static void vmem_release(void* ptr, size_t size) {
 #ifdef _WIN32
     VirtualFree(ptr, 0, MEM_RELEASE);
 #else

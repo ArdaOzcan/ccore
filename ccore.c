@@ -209,8 +209,8 @@ static void*
 varena_realloc_(void* start, size_t old_size, size_t new_size, void* context)
 {
     VArena* varena = context;
-    // If at the end of the arena, we can just push
-    // the required size and return the original pointer.
+    /* If at the end of the arena, we can just push
+    the required size and return the original pointer. */
     if (start + old_size == varena->base + varena->used) {
         varena_increase_capacity(varena, new_size - old_size);
         return start;
@@ -262,6 +262,18 @@ array_init(size_t item_size, size_t capacity, Allocator* allocator)
     return ptr;
 }
 
+ArrayHeader*
+array_header(const void* arr)
+{
+    return (ArrayHeader*)(arr)-1;
+}
+
+size_t
+array_len(const void* a)
+{
+    return array_header(a)->length;
+}
+
 void
 array_assign(void* dest, const void* src)
 {
@@ -271,7 +283,7 @@ array_assign(void* dest, const void* src)
     }
 
     memcpy(dest, src, array_header(src)->item_size * array_len(src));
-    array_len(dest) = array_len(src);
+    array_header(dest)->length = array_len(src);
 }
 
 void*
@@ -297,7 +309,7 @@ array_ensure_capacity(void* arr, size_t added_count)
         return arr;
     }
 
-    // Realloc array
+    /* Realloc array */
     size_t new_capacity = 2 * old_header->capacity;
     while (new_capacity < desired_capacity) {
         new_capacity *= 2;
@@ -388,13 +400,13 @@ dynstr_set(char* dest, const char* src)
 
     memcpy(dest, src, src_len);
     dest[src_len] = '\0';
-    array_len(dest) = src_len + 1;
+    array_header(dest)->length = src_len + 1;
 }
 
 void
 dynstr_shrink(char* str, size_t amount)
 {
-    // clamp
+    /* Clamp */
     amount = (amount > dynstr_len(str) ? dynstr_len(str) : amount);
     array_header(str)->length -= amount;
     str[array_len(str) - 1] = '\0';
@@ -403,7 +415,7 @@ dynstr_shrink(char* str, size_t amount)
 void
 dynstr_clear(char* str)
 {
-    array_len(str) = 1;
+    array_header(str)->length = 1;
     str[0] = '\0';
 }
 
@@ -416,14 +428,15 @@ byte_string_from_cstr(const char* str)
 #define FNV_OFFSET 14695981039346656037UL
 #define FNV_PRIME 1099511628211UL
 
-// From: https://benhoyt.com/writings/hash-table-in-c/
-// Return 64-bit FNV-1a hash for key (NUL-terminated). See description:
-// https://en.wikipedia.org/wiki/Fowler–Noll–Vo_hash_function
+/* From: https://benhoyt.com/writings/hash-table-in-c/
+   Return 64-bit FNV-1a hash for key (NUL-terminated). See description:
+   https://en.wikipedia.org/wiki/Fowler–Noll–Vo_hash_function */
 uint64_t
 cstr_hash(const char* key)
 {
     uint64_t hash = FNV_OFFSET;
-    for (const char* p = key; *p; p++) {
+    const char* p = key;
+    for (p = key; *p; p++) {
         hash ^= (uint64_t)(unsigned char)(*p);
         hash *= FNV_PRIME;
     }
@@ -434,7 +447,8 @@ uint64_t
 bytes_hash(const u8* key, size_t length)
 {
     uint64_t hash = FNV_OFFSET;
-    for (size_t i = 0; i < length; i++) {
+    size_t i = 0;
+    for (i = 0; i < length; i++) {
         hash ^= (uint64_t)(unsigned char)(key[i]);
         hash *= FNV_PRIME;
     }
@@ -444,7 +458,8 @@ bytes_hash(const u8* key, size_t length)
 void
 hashmap_clear(Hashmap* hashmap)
 {
-    for (int i = 0; i < hashmap->capacity; i++) {
+    size_t i = 0;
+    for (i = 0; i < hashmap->capacity; i++) {
         hashmap->records[i].type = HASHMAP_RECORD_EMPTY;
         hashmap->records[i].key = NULL;
         hashmap->records[i].value = NULL;
@@ -465,7 +480,8 @@ hashmap_init(Hashmap* hashmap,
     hashmap->length = 0;
     hashmap->hash_fn = hash_fn;
     hashmap->equals_fn = equals_fn;
-    for (int i = 0; i < hashmap->capacity; i++) {
+    size_t i = 0;
+    for (i = 0; i < hashmap->capacity; i++) {
         hashmap->records[i].type = HASHMAP_RECORD_EMPTY;
         hashmap->records[i].key = NULL;
         hashmap->records[i].value = NULL;
@@ -498,7 +514,8 @@ hashmap_byte_string_init(Hashmap* hashmap,
     hashmap->length = 0;
     hashmap->hash_fn = byte_string_hash;
     hashmap->equals_fn = byte_string_equal;
-    for (int i = 0; i < hashmap->capacity; i++) {
+    size_t i = 0;
+    for (i = 0; i < hashmap->capacity; i++) {
         hashmap->records[i].type = HASHMAP_RECORD_EMPTY;
         hashmap->records[i].key = NULL;
         hashmap->records[i].value = NULL;
@@ -512,7 +529,8 @@ hashmap_insert(Hashmap* hashmap, void* key, void* value)
         return false;
 
     u16 idx = hashmap->hash_fn(key) % hashmap->capacity;
-    for (int i = 0; i < hashmap->capacity; i++) {
+    size_t i = 0;
+    for (i = 0; i < hashmap->capacity; i++) {
         HashmapRecord* record =
           &hashmap->records[(idx + i) % hashmap->capacity];
 
@@ -536,7 +554,8 @@ void*
 hashmap_get(Hashmap* hashmap, void* key)
 {
     u16 hash = hashmap->hash_fn(key) % hashmap->capacity;
-    for (int i = 0; i < hashmap->capacity; i++) {
+    size_t i = 0;
+    for (i = 0; i < hashmap->capacity; i++) {
         u16 idx = (hash + i) % hashmap->capacity;
         HashmapRecord* record = &hashmap->records[idx];
         if (record->type == HASHMAP_RECORD_EMPTY) {
@@ -558,7 +577,8 @@ void*
 hashmap_byte_string_get(Hashmap* hashmap, ByteString key)
 {
     u16 hash = byte_string_hash(&key) % hashmap->capacity;
-    for (int i = 0; i < hashmap->capacity; i++) {
+    size_t i = 0;
+    for (i = 0; i < hashmap->capacity; i++) {
         u16 idx = (hash + i) % hashmap->capacity;
         HashmapRecord* record = &hashmap->records[idx];
         if (record->type == HASHMAP_RECORD_EMPTY) {
@@ -580,7 +600,8 @@ void*
 hashmap_delete(Hashmap* hashmap, void* key)
 {
     u16 hash = hashmap->hash_fn(key) % hashmap->capacity;
-    for (int i = 0; i < hashmap->capacity; i++) {
+    size_t i = 0;
+    for (i = 0; i < hashmap->capacity; i++) {
         u16 idx = (hash + i) % hashmap->capacity;
         HashmapRecord* record = &hashmap->records[idx];
         if (record->type == HASHMAP_RECORD_EMPTY) {

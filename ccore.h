@@ -4,7 +4,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -28,12 +27,10 @@ typedef uint32_t u32;
     (type*)arena_push(arena, sizeof(type) * length)
 
 #define array(type, cap, alloc) array_init(sizeof(type), cap, alloc)
-#define array_header(a) ((ArrayHeader*)(a) - 1)
-#define array_len(a) (array_header(a)->length)
 #define array_append(a, v)                                                     \
     ((a) = array_ensure_capacity(a, 1),                                        \
      (a)[array_len(a)] = (v),                                                  \
-     &(a)[array_len(a)++])
+     &(a)[array_header(a)->length++])
 #define array_remove(a, i)                                                     \
     do {                                                                       \
         ArrayHeader* h = array_header(a);                                      \
@@ -132,6 +129,12 @@ varena_allocator(VArena* varena);
 
 void*
 array_init(size_t item_size, size_t capacity, Allocator* allocator);
+
+size_t
+array_len(const void* a);
+
+ArrayHeader*
+array_header(const void* arr);
 
 void
 array_assign(void* dest, const void* src);
