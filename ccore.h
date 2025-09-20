@@ -137,7 +137,7 @@ void
 array_assign(void* dest, const void* src);
 
 void*
-array_copy(const void * original, Allocator* allocator);
+array_copy(const void* original, Allocator* allocator);
 
 void*
 array_ensure_capacity(void* arr, size_t added_count);
@@ -189,14 +189,11 @@ typedef struct
     void* value;
 } HashmapRecord;
 
-typedef uint64_t (*HashFunction)(const void*);
-typedef bool (*HashmapKeyEqualsFunction)(const void*, const void*);
-
 typedef struct
 {
     HashmapRecord* records;
-    HashFunction hash_fn;
-    HashmapKeyEqualsFunction equals_fn;
+    uint64_t (*hash_fn)(const void*);
+    bool (*equals_fn)(const void*, const void*);
     size_t capacity;
     size_t length;
 } Hashmap;
@@ -209,8 +206,8 @@ bytes_hash(const u8* key, size_t length);
 
 void
 hashmap_init(Hashmap* hashmap,
-             HashFunction hash_fn,
-             HashmapKeyEqualsFunction equals_fn,
+             uint64_t (*hash_fn)(const void*),
+             bool (*equals_fn)(const void*, const void*),
              size_t capacity,
              Allocator* allocator);
 
@@ -233,9 +230,6 @@ hashmap_byte_string_get(Hashmap* hashmap, ByteString key);
 
 void*
 hashmap_delete(Hashmap* hashmap, void* key);
-
-void
-hashmap_print(Hashmap* hashmap);
 
 size_t
 hashmap_len(Hashmap* hashmap);

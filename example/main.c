@@ -70,14 +70,12 @@ example_hashmap_byte_string(void)
     Allocator alloc = varena_allocator(&varena);
     hashmap_byte_string_init(&hashmap, 16, &alloc);
     printf("Hashmap initialized.\n");
-    hashmap_print(&hashmap);
 
     int val = 1345;
     hashmap_insert(&hashmap, &bytes, &val);
 
     printf(
       "Inserted key-value pair %.*s : %d\n", (int)bytes.length, bytes.ptr, val);
-    hashmap_print(&hashmap);
 
     int* lookup_val = (int*)hashmap_byte_string_get(
       &hashmap, byte_string_from_cstr("This is testing string!"));

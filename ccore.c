@@ -454,8 +454,8 @@ hashmap_clear(Hashmap* hashmap)
 
 void
 hashmap_init(Hashmap* hashmap,
-             HashFunction hash_fn,
-             HashmapKeyEqualsFunction equals_fn,
+             uint64_t (*hash_fn)(const void*),
+             bool (*equals_fn)(const void*, const void*),
              size_t capacity,
              Allocator* allocator)
 {
@@ -600,16 +600,4 @@ hashmap_delete(Hashmap* hashmap, void* key)
     }
 
     return NULL;
-}
-
-void
-hashmap_print(Hashmap* hashmap)
-{
-    printf("----START----\n");
-    for (int i = 0; i < hashmap->capacity; i++) {
-        HashmapRecord* record = &hashmap->records[i];
-        if (record->type == HASHMAP_RECORD_FILLED)
-            printf("(%d) %s: %s\n", i, record->key, (char*)record->value);
-    }
-    printf("----END----\n");
 }
