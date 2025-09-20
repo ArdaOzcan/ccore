@@ -4,7 +4,7 @@ project(CCore C)
 set(CMAKE_C_STANDARD 90)
 set(C_STANDARD_REQUIRED ON)
 
-add_compile_options(-Wall -Werror -g)
+add_compile_options(-Werror -g)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_library(ccore STATIC ccore.c)
