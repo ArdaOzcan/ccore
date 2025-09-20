@@ -25,13 +25,13 @@ static int vmem_commit(void* ptr, size_t size) {
 #endif
 }
 
-static int vmem_decommit(void* ptr, size_t size) {
-#ifdef _WIN32
-    return VirtualFree(ptr, size, MEM_DECOMMIT) != 0;
-#else
-    return madvise(ptr, size, MADV_DONTNEED) == 0;
-#endif
-}
+// static int vmem_decommit(void* ptr, size_t size) {
+// #ifdef _WIN32
+//     return VirtualFree(ptr, size, MEM_DECOMMIT) != 0;
+// #else
+//     return madvise(ptr, size, MADV_DONTNEED) == 0;
+// #endif
+// }
 
 static void vmem_release(void* ptr, size_t size) {
 #ifdef _WIN32
