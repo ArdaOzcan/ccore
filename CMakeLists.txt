@@ -14,6 +14,6 @@ if(BUILD_EXAMPLES)
     target_link_libraries(ccore_example PRIVATE ccore)
 endif()
 
-add_compile_options(-Werror -Wall)
+add_compile_options(-Wall -Werror -g)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
