@@ -31,18 +31,6 @@ typedef uint32_t u32;
     ((a) = array_ensure_capacity(a, 1),                                        \
      (a)[array_len(a)] = (v),                                                  \
      &(a)[array_header(a)->length++])
-#define array_remove(a, i)                                                     \
-    do {                                                                       \
-        ArrayHeader* h = array_header(a);                                      \
-        if (i == h->length - 1) {                                              \
-            h->length -= 1;                                                    \
-        } else if (h->length > 1) {                                            \
-            void* ptr = &a[i];                                                 \
-            void* last = &a[h->length - 1];                                    \
-            h->length -= 1;                                                    \
-            memcpy(ptr, last, sizeof(*a));                                     \
-        }                                                                      \
-    } while (0)
 #define array_pop_back(a) (a[--array_header(a)->length])
 
 #define dynstr_len(str) (array_len(str) - 1)
@@ -132,6 +120,9 @@ array_init(size_t item_size, size_t capacity, Allocator* allocator);
 
 size_t
 array_len(const void* a);
+
+void
+array_remove(void* arr, size_t idx);
 
 ArrayHeader*
 array_header(const void* arr);

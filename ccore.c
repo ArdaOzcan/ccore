@@ -275,6 +275,20 @@ array_len(const void* a)
 }
 
 void
+array_remove(void* arr, size_t idx)
+{
+    ArrayHeader* h = array_header(arr);
+    if (idx == h->length - 1) {
+        h->length -= 1;
+    } else if (h->length > 1 && idx < h->length) {
+        uintptr_t ptr = (uintptr_t)arr + idx * h->item_size;
+        uintptr_t last = (uintptr_t)arr + (h->length - 1) * h->item_size;
+        h->length -= 1;
+        memcpy((void*)ptr, (void*)last, h->item_size);
+    }
+}
+
+void
 array_assign(void* dest, const void* src)
 {
     int added_count = array_len(src) - array_len(dest);
