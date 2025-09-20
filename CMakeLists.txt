@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.5)
 project(CCore C)
 
-set(C_STANDARD_REQUIRED)
 set(CMAKE_C_STANDARD 90)
+set(C_STANDARD_REQUIRED ON)
 
 add_library(ccore STATIC ccore.c)
 target_include_directories(ccore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
