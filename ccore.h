@@ -21,7 +21,7 @@ typedef uint32_t u32;
 
 #define DEFAULT_ALIGNMENT (2 * sizeof(void*))
 
-#define make(T, n, a) ((T*)((a)->alloc(sizeof(T) * n, (a)->context)))
+#define make(T, n, a) ((T*)((a)->alloc(sizeof(T) * (n), (a)->context)))
 
 #define arena_push_array(arena, type, length)                                  \
     (type*)arena_push(arena, sizeof(type) * length)
