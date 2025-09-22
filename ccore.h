@@ -28,7 +28,8 @@ typedef uint32_t u32;
 
 #define array(type, cap, alloc) array_init(sizeof(type), cap, alloc)
 #define array_append(a, v)                                                     \
-    ((a) = array_ensure_capacity(a, 1),                                        \
+    (assert(sizeof(v) == array_header(a)->item_size),                          \
+     (a) = array_ensure_capacity(a, 1),                                        \
      (a)[array_len(a)] = (v),                                                  \
      &(a)[array_header(a)->length++])
 #define array_pop_back(a) (a[--array_header(a)->length])
