@@ -325,6 +325,8 @@ array_ensure_capacity(void* arr, size_t added_count)
 
     /* Realloc array */
     size_t new_capacity = 2 * old_header->capacity;
+    if (new_capacity == 0)
+        new_capacity = 1;
     while (new_capacity < desired_capacity) {
         new_capacity *= 2;
     }
