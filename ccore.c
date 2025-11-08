@@ -381,6 +381,7 @@ dynstr_from_cstr(const char* cstr, size_t capacity, Allocator* allocator)
     array_ensure_capacity(arr, len + 1);
     memcpy(arr, cstr, len);
     arr[len] = '\0';
+    array_header(arr)->length = len + 1;
 
     return arr;
 }
