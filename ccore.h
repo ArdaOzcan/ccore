@@ -80,6 +80,39 @@ typedef struct
     Allocator* allocator;
 } ArrayHeader;
 
+typedef struct PoolFreeNode PoolFreeNode;
+struct PoolFreeNode
+{
+    PoolFreeNode* next;
+};
+
+typedef struct
+{
+    u8* base;
+    size_t capacity;
+    size_t chunk_size;
+    PoolFreeNode* head;
+} Pool;
+
+void
+pool_init(Pool* pool,
+          void* base,
+          size_t capacity,
+          size_t chunk_size,
+          size_t chunk_alignment);
+
+void
+pool_free_all(Pool* p);
+
+void*
+pool_allocate(Pool* p);
+
+void
+pool_free(Pool* p, void* ptr);
+
+Allocator
+pool_allocator(Pool* pool);
+
 size_t
 system_page_size();
 
@@ -90,7 +123,7 @@ void
 arena_init_ex(Arena* arena, void* base, size_t size, size_t alignment);
 
 void*
-arena_push(Arena* arena, size_t size);
+arena_allocate(Arena* arena, size_t size);
 
 void
 arena_push_copy(Arena* arena, const void* data, size_t size);

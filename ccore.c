@@ -166,7 +166,7 @@ arena_push_aligned(Arena* arena, size_t size, size_t alignment)
 }
 
 void*
-arena_push(Arena* a, size_t size)
+arena_allocate(Arena* a, size_t size)
 {
     return arena_push_aligned(a, size, a->alignment);
 }
@@ -174,19 +174,19 @@ arena_push(Arena* a, size_t size)
 void
 arena_push_copy(Arena* arena, const void* data, size_t size)
 {
-    memcpy(arena_push(arena, size), data, size);
+    memcpy(arena_allocate(arena, size), data, size);
 }
 
 static void*
 arena_alloc_(size_t bytes, void* context)
 {
-    return arena_push((Arena*)context, bytes);
+    return arena_allocate((Arena*)context, bytes);
 }
 
 static void*
 arena_realloc_(void* start, size_t old_size, size_t new_size, void* context)
 {
-    return arena_push((Arena*)context, new_size);
+    return arena_allocate((Arena*)context, new_size);
 }
 
 static void
@@ -219,6 +219,30 @@ varena_realloc_(void* start, size_t old_size, size_t new_size, void* context)
     }
 }
 
+static void*
+pool_alloc_(size_t bytes, void* context)
+{
+    assert(bytes <= ((Pool*)context)->chunk_size &&
+           "Size was larger than chunk size");
+    printf("Allocating chunk from pool.\n");
+    return pool_allocate((Pool*)context);
+}
+
+static void
+pool_free_(void* ptr, size_t bytes, void* context)
+{
+    Pool* pool = context;
+    pool_free(pool, ptr);
+}
+
+static void*
+pool_realloc_(void* start, size_t old_size, size_t new_size, void* context)
+{
+    Pool* pool = context;
+    printf("Realloc requested. Doing nothing\n");
+    return start;
+}
+
 Allocator
 arena_allocator(Arena* arena)
 {
@@ -239,6 +263,94 @@ varena_allocator(VArena* varena)
         .free = varena_free_,
         .context = varena,
     };
+}
+
+Allocator
+pool_allocator(Pool* pool)
+{
+    return (Allocator){
+        .alloc = pool_alloc_,
+        .realloc = pool_realloc_,
+        .free = pool_free_,
+        .context = pool,
+    };
+}
+
+void
+pool_free_all(Pool* p)
+{
+    size_t chunk_count = p->capacity / p->chunk_size;
+    size_t i;
+
+    for (i = 0; i < chunk_count; i++) {
+        void* ptr = &p->base[i * p->chunk_size];
+        PoolFreeNode* node = (PoolFreeNode*)ptr;
+        node->next = p->head;
+        p->head = node;
+    }
+}
+
+void
+pool_init(Pool* pool,
+          void* base,
+          size_t capacity,
+          size_t chunk_size,
+          size_t chunk_alignment)
+{
+    uintptr_t initial_start = (uintptr_t)base;
+    uintptr_t start = align_forward(initial_start, (uintptr_t)chunk_alignment);
+    capacity -= (size_t)(start - initial_start);
+
+    chunk_size = align_forward(chunk_size, chunk_alignment);
+
+    assert(chunk_size >= sizeof(PoolFreeNode) && "Chunk size is too small");
+    assert(capacity >= chunk_size &&
+           "Backing buffer length is smaller than the chunk size");
+
+    pool->base = (unsigned char*)base;
+    pool->capacity = capacity;
+    pool->chunk_size = chunk_size;
+    pool->head = NULL;
+
+    pool_free_all(pool);
+}
+
+void*
+pool_allocate(Pool* p)
+{
+    PoolFreeNode* node = p->head;
+
+    if (node == NULL) {
+        assert(0 && "Pool allocator has no free memory");
+        return NULL;
+    }
+
+    p->head = p->head->next;
+    printf("Allocated %p\n", node);
+    return memset(node, 0, p->chunk_size);
+}
+
+void
+pool_free(Pool* p, void* ptr)
+{
+    PoolFreeNode* node;
+
+    void* start = p->base;
+    void* end = &p->base[p->capacity];
+
+    if (ptr == NULL) {
+        return;
+    }
+
+    if (!(start <= ptr && ptr < end)) {
+        assert(0 && "Memory is out of bounds of the buffer in this pool");
+        return;
+    }
+
+    printf("Freed %p\n", ptr);
+    node = (PoolFreeNode*)ptr;
+    node->next = p->head;
+    p->head = node;
 }
 
 void*
@@ -349,14 +461,12 @@ array_ensure_capacity(void* arr, size_t added_count)
 
     if (new_header != old_header) {
 #ifdef CCORE_VERBOSE
-        printf("Copied memory.\n");
+        printf("Copied array (%zu bytes) from %p to %p.\n",
+               old_size,
+               old_header,
+               new_header);
 #endif
         memcpy(new_header, old_header, old_size);
-    }
-
-    if (old_header->allocator->free) {
-        old_header->allocator->free(
-          old_header, old_size, old_header->allocator->context);
     }
 
     new_header->capacity = new_capacity;
