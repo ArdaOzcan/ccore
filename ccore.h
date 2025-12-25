@@ -94,6 +94,19 @@ typedef struct
     PoolFreeNode* head;
 } Pool;
 
+typedef struct BuddyBlock
+{
+    size_t size;
+    bool is_free;
+} BuddyBlock;
+
+typedef struct BuddyAllocator
+{
+    BuddyBlock* head;
+    BuddyBlock* tail;
+    size_t alignment;
+} BuddyAllocator;
+
 void
 pool_init(Pool* pool,
           void* base,
@@ -112,6 +125,21 @@ pool_free(Pool* p, void* ptr);
 
 Allocator
 pool_allocator(Pool* pool);
+
+void
+buddy_allocator_init(BuddyAllocator* b,
+                     void* data,
+                     size_t size,
+                     size_t alignment);
+
+void
+buddy_allocator_free(BuddyAllocator* b, void* data);
+
+void*
+buddy_allocator_alloc(BuddyAllocator* b, size_t size);
+
+Allocator
+buddy_allocator(BuddyAllocator* buddy);
 
 size_t
 system_page_size();

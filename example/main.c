@@ -4,8 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-int
-arena_example(void)
+void
+example_arena(void)
 {
     printf("----REGULAR ARENA----\n");
     const size_t arr_len = 1024;
@@ -18,8 +18,18 @@ arena_example(void)
     Allocator allocator = arena_allocator(&arena);
     int* arr = array(int, 16, &allocator);
     size_t old_used = 0;
-    size_t i = 0;
-    for (i = 0; i < arr_len; i++) {
+    int i = 0;
+    for (i = 0; i < arr_len / 2; i++) {
+        array_append(arr, i);
+        if (arena.used != old_used) {
+            printf("Arena used: %zu/%zu\n", arena.used, arena.size);
+            old_used = arena.used;
+        }
+    }
+    printf("Inserted some other data in the middle. Now  array needs to be "
+           "copied. Old array occupies the arena.\n");
+    make(int, 5, &allocator);
+    for (i = 0; i < arr_len / 2; i++) {
         array_append(arr, i);
         if (arena.used != old_used) {
             printf("Arena used: %zu/%zu\n", arena.used, arena.size);
@@ -32,14 +42,24 @@ arena_example(void)
     int result = varena_init(&varena, 1UL << 30);
     if (result != 0) {
         fprintf(stderr, "Error initializing varena.\n");
-        return 1;
+        return;
     }
 
     printf("%zu, %zu\n", sizeof(int), DEFAULT_ALIGNMENT);
     Allocator vallocator = varena_allocator(&varena);
     int* varr = array(int, 16, &vallocator);
     size_t old_offset = 0;
-    for (i = 0; i < arr_len; i++) {
+    for (i = 0; i < arr_len / 2; i++) {
+        array_append(varr, i);
+        if (varena.used != old_offset) {
+            printf("VArena used: %zu/%zu\n", varena.used, varena.size);
+            old_offset = varena.used;
+        }
+    }
+    printf("Inserted some other data in the middle. Now  array needs to be "
+           "copied. Old array occupies the arena.\n");
+    make(int, 5, &vallocator);
+    for (i = 0; i < arr_len / 2; i++) {
         array_append(varr, i);
         if (varena.used != old_offset) {
             printf("VArena used: %zu/%zu\n", varena.used, varena.size);
@@ -54,12 +74,14 @@ arena_example(void)
     }
 
     printf("%s\n", str);
-    return 0;
+    varena_destroy(&varena);
+    free(base);
 }
 
-int
+void
 example_hashmap_byte_string(void)
 {
+    printf("----HASHMAP BYTE STRING----");
     ByteString bytes = byte_string_from_cstr("This is testing string!");
     printf("ByteString \"%.*s\" created with length %zu\n",
            (int)bytes.length,
@@ -71,7 +93,6 @@ example_hashmap_byte_string(void)
     Allocator alloc = varena_allocator(&varena);
     hashmap_byte_string_init(&hashmap, 16, &alloc);
     printf("Hashmap initialized.\n");
-
     int val = 1345;
     hashmap_insert(&hashmap, &bytes, &val);
 
@@ -83,21 +104,22 @@ example_hashmap_byte_string(void)
 
     if (lookup_val == NULL) {
         fprintf(stderr, "Lookup value was not found\n");
-        return 1;
+        return;
     }
 
     printf("Lookup value was: %d\n", *lookup_val);
 
-    return 0;
+    varena_destroy(&varena);
 }
 
-int
+void
 example_array_copy(void)
 {
+    printf("----ARRAY COPY----");
     VArena varena = { 0 };
     varena_init(&varena, 1 << 16);
     Allocator allocator = varena_allocator(&varena);
-    u8* original_arr = array(u8, 32, &allocator);
+    u8* original_arr = array(int, 32, &allocator);
     size_t i = 0;
     for (i = 0; i < 25; i++) {
         array_append(original_arr, rand() % 256);
@@ -109,23 +131,24 @@ example_array_copy(void)
         printf("[%lu]: %u == %u\n", i, original_arr[i], copy_arr[i]);
     }
 
-    return 0;
+    varena_destroy(&varena);
 }
 
-int
-main(void)
+void
+example_array_assign()
 {
+    printf("----ARRAY ASSIGN----");
     VArena varena = { 0 };
     varena_init(&varena, 1 << 16);
     Allocator allocator = varena_allocator(&varena);
     u8* array_a = array(u8, 32, &allocator);
     size_t i = 0;
     for (i = 0; i < 25; i++) {
-        array_append(array_a, rand() % 256);
+        array_append(array_a, (u8)(rand() % 256));
     }
     u8* array_b = array(u8, 32, &allocator);
     for (i = 0; i < 25; i++) {
-        array_append(array_b, rand() % 256);
+        array_append(array_b, (u8)(rand() % 256));
     }
 
     printf("B before assignment:\n");
@@ -138,6 +161,15 @@ main(void)
         assert(array_a[i] == array_b[i]);
         printf("[%lu]: %u == %u\n", i, array_a[i], array_b[i]);
     }
+    varena_destroy(&varena);
+}
 
+int
+main(void)
+{
+    example_arena();
+    example_array_assign();
+    example_array_copy();
+    example_hashmap_byte_string();
     return 0;
 }

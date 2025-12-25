@@ -186,7 +186,31 @@ arena_alloc_(size_t bytes, void* context)
 static void*
 arena_realloc_(void* start, size_t old_size, size_t new_size, void* context)
 {
-    return arena_allocate((Arena*)context, new_size);
+    Arena* arena = context;
+    if (new_size < old_size) {
+        if (start + old_size == arena->base + arena->used) {
+            arena->used -= old_size - new_size;
+        }
+        return start;
+    }
+
+    /* If at the end of the arena, we can just push
+    the required size and return the original pointer. */
+    if (start + old_size == arena->base + arena->used) {
+        arena->used += new_size - old_size;
+        if (arena->used > arena->size) {
+            printf("Arena is full\n");
+            return NULL;
+        }
+        return start;
+    } else {
+        void* new_start = arena_allocate(arena, new_size);
+#ifdef CCORE_VERBOSE
+        printf("Copied %lu bytes from %p to %p.\n", old_size, start, new_start);
+#endif
+        memcpy(new_start, start, old_size);
+        return new_start;
+    }
 }
 
 static void
@@ -209,13 +233,22 @@ static void*
 varena_realloc_(void* start, size_t old_size, size_t new_size, void* context)
 {
     VArena* varena = context;
+    if (new_size < old_size) {
+        if (start + old_size == varena->base + varena->used) {
+            varena->used -= old_size - new_size;
+        }
+        return start;
+    }
+
     /* If at the end of the arena, we can just push
     the required size and return the original pointer. */
     if (start + old_size == varena->base + varena->used) {
         varena_increase_capacity(varena, new_size - old_size);
         return start;
     } else {
-        return varena_push(varena, new_size);
+        void* new_start = varena_push(varena, new_size);
+        memcpy(new_start, start, old_size);
+        return new_start;
     }
 }
 
@@ -239,8 +272,49 @@ static void*
 pool_realloc_(void* start, size_t old_size, size_t new_size, void* context)
 {
     Pool* pool = context;
-    printf("Realloc requested. Doing nothing\n");
+#ifdef CCORE_VERBOSE
+    printf("Realloc requested for pool. Doing nothing\n");
+#endif
     return start;
+}
+
+static void*
+buddy_alloc_(size_t bytes, void* context)
+{
+    return buddy_allocator_alloc((BuddyAllocator*)context, bytes);
+}
+
+static void
+buddy_free_(void* ptr, size_t bytes, void* context)
+{
+    buddy_allocator_free((BuddyAllocator*)context, ptr);
+}
+
+static void*
+buddy_realloc_(void* start, size_t old_size, size_t new_size, void* context)
+{
+#ifdef CCORE_VERBOSE
+    printf("Buddy allocator realloc called for %p (%lu bytes to %lu bytes)\n",
+           start,
+           old_size,
+           new_size);
+#endif
+    BuddyAllocator* buddy_allocator = context;
+    BuddyBlock* block =
+      (BuddyBlock*)((uintptr_t)start - buddy_allocator->alignment);
+
+    if (new_size > old_size && new_size < block->size) {
+#ifdef CCORE_VERBOSE
+        printf("Block size %lu was sufficient.\n", block->size);
+#endif
+        return start;
+    }
+
+    buddy_allocator_free(buddy_allocator, start);
+    void* new_start = buddy_allocator_alloc(buddy_allocator, new_size);
+    size_t smaller_size = old_size > new_size ? new_size : old_size;
+    memcpy(new_start, start, smaller_size);
+    return new_start;
 }
 
 Allocator
@@ -262,6 +336,17 @@ varena_allocator(VArena* varena)
         .realloc = varena_realloc_,
         .free = varena_free_,
         .context = varena,
+    };
+}
+
+Allocator
+buddy_allocator(BuddyAllocator* buddy)
+{
+    return (Allocator){
+        .alloc = buddy_alloc_,
+        .realloc = buddy_realloc_,
+        .free = buddy_free_,
+        .context = buddy,
     };
 }
 
@@ -351,6 +436,225 @@ pool_free(Pool* p, void* ptr)
     node = (PoolFreeNode*)ptr;
     node->next = p->head;
     p->head = node;
+}
+
+static BuddyBlock*
+buddy_block_next(BuddyBlock* block)
+{
+    return (BuddyBlock*)((char*)block + block->size);
+}
+
+static BuddyBlock*
+buddy_block_split(BuddyBlock* block, size_t size)
+{
+    if (block != NULL && size != 0) {
+        while (size < block->size) {
+            size_t new_size = block->size >> 1;
+            block->size = new_size;
+            block = buddy_block_next(block);
+            block->size = new_size;
+            block->is_free = true;
+        }
+
+        if (size <= block->size) {
+            return block;
+        }
+    }
+
+    return NULL;
+}
+
+static BuddyBlock*
+buddy_block_find_best(BuddyBlock* head, BuddyBlock* tail, size_t size)
+{
+    BuddyBlock* best_block = NULL;
+    BuddyBlock* block = head;
+    BuddyBlock* buddy = buddy_block_next(block);
+
+    if (buddy == tail && block->is_free) {
+        return buddy_block_split(block, size);
+    }
+
+    while (block < tail && buddy < tail) {
+        /* Merge empty buddies with same size, reduces fragmentation */
+        if (block->is_free && buddy->is_free && block->size == buddy->size) {
+            block->size <<= 1;
+            if (size <= block->size &&
+                (best_block == NULL || block->size <= best_block->size)) {
+                best_block = block;
+            }
+
+            block = buddy_block_next(buddy);
+            if (block < tail) {
+                buddy = buddy_block_next(block);
+            }
+            continue;
+        }
+
+        /* The current block is suitable */
+        if (block->is_free && size <= block->size &&
+            (best_block == NULL || block->size <= best_block->size)) {
+            best_block = block;
+        }
+
+        /* Pick the buddy if it has smaller size */
+        if (buddy->is_free && size <= buddy->size &&
+            (best_block == NULL || buddy->size < best_block->size)) {
+            best_block = buddy;
+        }
+
+        if (block->size <= buddy->size) {
+            block = buddy_block_next(buddy);
+            if (block < tail) {
+                buddy = buddy_block_next(block);
+            }
+        } else {
+            block = buddy;
+            buddy = buddy_block_next(buddy);
+        }
+    }
+
+    if (best_block != NULL) {
+        /* Handles the case where the best block is a perfect fit */
+        return buddy_block_split(best_block, size);
+    }
+
+    return NULL;
+}
+
+static bool
+is_power_of_two(size_t x)
+{
+    return (x & (x - 1)) == 0;
+}
+
+void
+buddy_allocator_init(BuddyAllocator* b,
+                     void* data,
+                     size_t size,
+                     size_t alignment)
+{
+    assert(data != NULL);
+    assert(is_power_of_two(size) && "size is not a power-of-two");
+    assert(is_power_of_two(alignment) && "alignment is not a power-of-two");
+
+    assert(is_power_of_two(sizeof(BuddyBlock)));
+    if (alignment < sizeof(BuddyBlock)) {
+        alignment = sizeof(BuddyBlock);
+    }
+    assert((uintptr_t)data % alignment == 0 &&
+           "data is not aligned to minimum alignment");
+
+    b->head = (BuddyBlock*)data;
+    b->head->size = size;
+    b->head->is_free = true;
+
+    b->tail = buddy_block_next(b->head);
+
+    b->alignment = alignment;
+}
+
+static size_t
+buddy_block_size_required(BuddyAllocator* b, size_t size)
+{
+    size_t actual_size = b->alignment;
+
+    size += sizeof(BuddyBlock);
+    size = align_forward(size, b->alignment);
+
+    while (size > actual_size) {
+        actual_size <<= 1;
+    }
+
+    return actual_size;
+}
+
+static void
+buddy_block_coalescence(BuddyBlock* head, BuddyBlock* tail)
+{
+    for (;;) {
+        BuddyBlock* block = head;
+        BuddyBlock* buddy = buddy_block_next(block);
+
+        bool no_coalescence = true;
+        while (block < tail && buddy < tail) {
+            if (block->is_free && buddy->is_free &&
+                block->size == buddy->size) {
+                block->size <<= 1;
+                block = buddy_block_next(block);
+                if (block < tail) {
+                    buddy = buddy_block_next(block);
+                    no_coalescence = false;
+                }
+            } else if (block->size < buddy->size) {
+                block = buddy;
+                buddy = buddy_block_next(buddy);
+            } else {
+                block = buddy_block_next(buddy);
+                if (block < tail) {
+                    buddy = buddy_block_next(block);
+                }
+            }
+        }
+
+        if (no_coalescence) {
+            return;
+        }
+    }
+}
+
+void*
+buddy_allocator_alloc(BuddyAllocator* b, size_t size)
+{
+#ifdef CCORE_VERBOSE
+    printf("Buddy allocator allocate called %lu bytes\n", size);
+#endif
+    if (size != 0) {
+        size_t actual_size = buddy_block_size_required(b, size);
+
+        BuddyBlock* found =
+          buddy_block_find_best(b->head, b->tail, actual_size);
+        if (found == NULL) {
+            buddy_block_coalescence(b->head, b->tail);
+            found = buddy_block_find_best(b->head, b->tail, actual_size);
+        }
+
+        if (found != NULL) {
+            found->is_free = false;
+#ifdef CCORE_VERBOSE
+            printf("Found a block with size %lu and address %p.\n",
+                   found->size,
+                   found);
+#endif
+            return (void*)((char*)found + b->alignment);
+        }
+    }
+
+#ifdef CCORE_VERBOSE
+    fprintf(
+      stderr,
+      "No block with sufficient size was found. Size requested: %lu bytes.\n",
+      size);
+#endif
+
+    return NULL;
+}
+
+void
+buddy_allocator_free(BuddyAllocator* b, void* data)
+{
+    if (data != NULL) {
+        BuddyBlock* block;
+
+        assert((uintptr_t)b->head <= (uintptr_t)data);
+        assert((uintptr_t)data < (uintptr_t)b->tail);
+
+        block = (BuddyBlock*)((char*)data - b->alignment);
+        block->is_free = true;
+#ifdef CCORE_VERBOSE
+        printf("Block %p with size %lu freed.\n", block, block->size);
+#endif
+    }
 }
 
 void*
@@ -447,26 +751,16 @@ array_ensure_capacity(void* arr, size_t added_count)
       sizeof(ArrayHeader) + old_header->capacity * old_header->item_size;
     size_t new_size =
       sizeof(ArrayHeader) + new_capacity * old_header->item_size;
-    ArrayHeader* new_header = old_header->allocator->realloc(
-      old_header, old_size, new_size, old_header->allocator->context);
-
-    if (new_header == NULL) {
-        return NULL;
-    }
 
 #ifdef CCORE_VERBOSE
     printf(
       "Reallocing array from %zu bytes to %zu bytes.\n", old_size, new_size);
 #endif
+    ArrayHeader* new_header = old_header->allocator->realloc(
+      old_header, old_size, new_size, old_header->allocator->context);
 
-    if (new_header != old_header) {
-#ifdef CCORE_VERBOSE
-        printf("Copied array (%zu bytes) from %p to %p.\n",
-               old_size,
-               old_header,
-               new_header);
-#endif
-        memcpy(new_header, old_header, old_size);
+    if (new_header == NULL) {
+        return NULL;
     }
 
     new_header->capacity = new_capacity;
@@ -500,7 +794,7 @@ char*
 dynstr_init(size_t capacity, Allocator* a)
 {
     char* arr = array(char, capacity, a);
-    array_append(arr, '\0');
+    array_append(arr, (u8)'\0');
 
     return arr;
 }
