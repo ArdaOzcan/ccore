@@ -29,7 +29,7 @@ typedef uint32_t u32;
 #define array(type, cap, alloc) array_init(sizeof(type), cap, alloc)
 #define array_append(a, v)                                                     \
     (assert(sizeof(v) == array_header(a)->item_size),                          \
-     (a) = array_ensure_capacity(a, 1),                                        \
+     (a)               = array_ensure_capacity(a, 1),                          \
      (a)[array_len(a)] = (v),                                                  \
      &(a)[array_header(a)->length++])
 #define array_pop_back(a) (a[--array_header(a)->length])
@@ -37,8 +37,8 @@ typedef uint32_t u32;
 #define dynstr_len(str) (array_len(str) - 1)
 #define dynstr_append_c(dest, src)                                             \
     {                                                                          \
-        (dest) = array_ensure_capacity(dest, 1);                               \
-        (dest)[(dynstr_len(dest))] = (src);                                    \
+        (dest)                         = array_ensure_capacity(dest, 1);       \
+        (dest)[(dynstr_len(dest))]     = (src);                                \
         (dest)[(dynstr_len(dest)) + 1] = '\0';                                 \
         (array_header((dest)))->length++;                                      \
     }
@@ -148,6 +148,9 @@ void
 arena_init(Arena* arena, void* base, size_t size);
 
 void
+arena_clear(Arena* arena);
+
+void
 arena_init_ex(Arena* arena, void* base, size_t size, size_t alignment);
 
 void*
@@ -161,6 +164,9 @@ arena_allocator(Arena* arena);
 
 int
 varena_init(VArena* arena, size_t size);
+
+void
+varena_clear(VArena* varena);
 
 int
 varena_init_ex(VArena* arena, size_t size, size_t page_size, size_t alignment);

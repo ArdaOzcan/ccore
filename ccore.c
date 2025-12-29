@@ -31,14 +31,23 @@ varena_destroy(VArena* varena)
 {
     vmem_release(varena->base, varena->size);
 
+#ifdef CCORE_VERBOSE
+    printf("CCORE: VARENA, %p, DESTROY\n", varena->base);
+#endif
     varena->base       = NULL;
     varena->used       = 0;
     varena->page_count = 0;
     varena->size       = 0;
-#ifdef CCORE_VERBOSE
-    printf("CCORE: VARENA, %p, RESET\n", varena->base);
-#endif
     return 0;
+}
+
+void
+varena_clear(VArena* varena)
+{
+    varena->used = 0;
+#ifdef CCORE_VERBOSE
+    printf("CCORE: VARENA, %p, CLEAR\n", varena->base);
+#endif
 }
 
 int
@@ -156,6 +165,15 @@ arena_init_ex(Arena* arena, void* base, size_t size, size_t alignment)
     arena->size      = size;
     arena->alignment = alignment;
     arena->used      = 0;
+}
+
+void
+arena_clear(Arena* arena)
+{
+    arena->used = 0;
+#ifdef CCORE_VERBOSE
+    // printf("CCORE: ARENA, %p, CLEAR\n", arena->base);
+#endif
 }
 
 void
