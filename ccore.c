@@ -14,6 +14,17 @@
 #include <unistd.h>
 #endif
 
+#define CSV_LOG_VARENA(func, alloc_ptr, size_, extra)                          \
+    printf("VARENA,%s,%p,%p,%zu,%zu,%zu,%zu,%s\n",                             \
+           (func),                                                             \
+           varena->base,                                                       \
+           (alloc_ptr),                                                        \
+           (size_t)(size_),                                                    \
+           varena->used,                                                       \
+           varena->page_count * varena->page_size,                             \
+           varena->size,                                                       \
+           (extra))
+
 size_t
 system_page_size()
 {
@@ -32,7 +43,7 @@ varena_destroy(VArena* varena)
     vmem_release(varena->base, varena->size);
 
 #ifdef CCORE_VERBOSE
-    printf("CCORE: VARENA, %p, DESTROY\n", varena->base);
+    CSV_LOG_VARENA("DESTROY", varena->base, 0, "Memory Released");
 #endif
     varena->base       = NULL;
     varena->used       = 0;
@@ -46,7 +57,7 @@ varena_clear(VArena* varena)
 {
     varena->used = 0;
 #ifdef CCORE_VERBOSE
-    printf("CCORE: VARENA, %p, CLEAR\n", varena->base);
+    CSV_LOG_VARENA("CLEAR", varena->base, 0, "Pointer Reset");
 #endif
 }
 
@@ -69,11 +80,7 @@ varena_init_ex(VArena* varena, size_t size, size_t page_size, size_t alignment)
     varena->size       = size;
     varena->alignment  = alignment;
 #ifdef CCORE_VERBOSE
-    printf("CCORE: VARENA, %p, INIT, %zu, %zu, %p\n",
-           varena->base,
-           size,
-           page_size,
-           base);
+    CSV_LOG_VARENA("INIT", base, size, "Reserved Virtual Space");
 #endif
 
     return 0;
@@ -93,10 +100,9 @@ varena_commit_pages(VArena* varena, size_t amount)
     vmem_commit(start, varena->page_size * amount);
 
 #ifdef CCORE_VERBOSE
-    printf("CCORE: VARENA, %p, COMMIT, %zu, %p\n",
-           varena->base,
-           varena->page_size,
-           start);
+    char info[64];
+    sprintf(info, "Committed %zu new pages", amount);
+    CSV_LOG_VARENA("COMMIT", start, varena->page_size * amount, info);
 #endif
     varena->page_count += amount;
     return 0;
@@ -139,16 +145,14 @@ varena_push(VArena* varena, size_t size)
 {
     size_t start_offset = align_forward(varena->used, varena->alignment);
     size_t end_offset   = start_offset + size;
-#ifdef CCORE_VERBOSE
-    printf("CCORE: VARENA, %p, PUSH, %zu, %p\n",
-           varena->base,
-           size,
-           varena->base + varena->used);
-#endif
 
     varena_increase_capacity(varena, end_offset - varena->used);
 
-    return (uint8_t*)varena->base + start_offset;
+    void* result = (uint8_t*)varena->base + start_offset;
+#ifdef CCORE_VERBOSE
+    CSV_LOG_VARENA("PUSH", result, size, "");
+#endif
+    return result;
 }
 
 void
