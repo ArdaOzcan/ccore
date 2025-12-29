@@ -62,6 +62,12 @@ varena_init_ex(VArena* varena, size_t size, size_t page_size, size_t alignment)
     assert(page_size % system_page_size() == 0);
     void* base = vmem_reserve(size);
 
+    varena->base       = base;
+    varena->used       = 0;
+    varena->page_count = 0;
+    varena->page_size  = page_size;
+    varena->size       = size;
+    varena->alignment  = alignment;
 #ifdef CCORE_VERBOSE
     printf("CCORE: VARENA, %p, INIT, %zu, %zu, %p\n",
            varena->base,
@@ -69,13 +75,6 @@ varena_init_ex(VArena* varena, size_t size, size_t page_size, size_t alignment)
            page_size,
            base);
 #endif
-
-    varena->base       = base;
-    varena->used       = 0;
-    varena->page_count = 0;
-    varena->page_size  = page_size;
-    varena->size       = size;
-    varena->alignment  = alignment;
 
     return 0;
 }
