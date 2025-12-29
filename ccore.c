@@ -172,7 +172,7 @@ arena_clear(Arena* arena)
 {
     arena->used = 0;
 #ifdef CCORE_VERBOSE
-    // printf("CCORE: ARENA, %p, CLEAR\n", arena->base);
+    /* printf("CCORE: ARENA, %p, CLEAR\n", arena->base); */
 #endif
 }
 
