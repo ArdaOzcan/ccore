@@ -36,7 +36,7 @@ varena_destroy(VArena* varena)
     varena->page_count = 0;
     varena->size       = 0;
 #ifdef CCORE_VERBOSE
-    printf("CCORE: VARENA, RESET\n");
+    printf("CCORE: VARENA, %p, RESET\n", varena->base);
 #endif
     return 0;
 }
@@ -48,21 +48,25 @@ varena_init(VArena* arena, size_t size)
 }
 
 int
-varena_init_ex(VArena* arena, size_t size, size_t page_size, size_t alignment)
+varena_init_ex(VArena* varena, size_t size, size_t page_size, size_t alignment)
 {
     assert(page_size % system_page_size() == 0);
     void* base = vmem_reserve(size);
 
 #ifdef CCORE_VERBOSE
-    printf("CCORE: VARENA, INIT, %zu, %zu, %p\n", size, page_size, base);
+    printf("CCORE: VARENA, %p, INIT, %zu, %zu, %p\n",
+           varena->base,
+           size,
+           page_size,
+           base);
 #endif
 
-    arena->base       = base;
-    arena->used       = 0;
-    arena->page_count = 0;
-    arena->page_size  = page_size;
-    arena->size       = size;
-    arena->alignment  = alignment;
+    varena->base       = base;
+    varena->used       = 0;
+    varena->page_count = 0;
+    varena->page_size  = page_size;
+    varena->size       = size;
+    varena->alignment  = alignment;
 
     return 0;
 }
@@ -81,7 +85,10 @@ varena_commit_pages(VArena* varena, size_t amount)
     vmem_commit(start, varena->page_size * amount);
 
 #ifdef CCORE_VERBOSE
-    printf("CCORE: VARENA, COMMIT, %zu, %p\n", varena->page_size, start);
+    printf("CCORE: VARENA, %p, COMMIT, %zu, %p\n",
+           varena->base,
+           varena->page_size,
+           start);
 #endif
     varena->page_count += amount;
     return 0;
@@ -125,7 +132,10 @@ varena_push(VArena* varena, size_t size)
     size_t start_offset = align_forward(varena->used, varena->alignment);
     size_t end_offset   = start_offset + size;
 #ifdef CCORE_VERBOSE
-    printf("CCORE: VARENA, PUSH, %zu, %p\n", size, varena->base + varena->used);
+    printf("CCORE: VARENA, %p, PUSH, %zu, %p\n",
+           varena->base,
+           size,
+           varena->base + varena->used);
 #endif
 
     varena_increase_capacity(varena, end_offset - varena->used);
@@ -669,7 +679,7 @@ array_init(size_t item_size, size_t capacity, Allocator* allocator)
     if (header) {
         header->capacity = capacity;
 #ifdef CCORE_VERBOSE
-        // printf("Array initialized with capacity %zu\n", capacity);
+        /* printf("Array initialized with capacity %zu\n", capacity); */
 #endif
         header->length    = 0;
         header->item_size = item_size;
@@ -755,8 +765,9 @@ array_ensure_capacity(void* arr, size_t added_count)
       sizeof(ArrayHeader) + new_capacity * old_header->item_size;
 
 #ifdef CCORE_VERBOSE
-    // printf(
-    //   "Reallocing array from %zu bytes to %zu bytes.\n", old_size, new_size);
+    /* printf(
+       "Reallocing array from %zu bytes to %zu bytes.\n", old_size, new_size);
+     */
 #endif
     ArrayHeader* new_header = old_header->allocator->realloc(
       old_header, old_size, new_size, old_header->allocator->context);
