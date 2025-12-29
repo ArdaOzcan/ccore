@@ -31,10 +31,13 @@ varena_destroy(VArena* varena)
 {
     vmem_release(varena->base, varena->size);
 
-    varena->base = NULL;
-    varena->used = 0;
+    varena->base       = NULL;
+    varena->used       = 0;
     varena->page_count = 0;
-    varena->size = 0;
+    varena->size       = 0;
+#ifdef CCORE_VERBOSE
+    printf("CCORE: VARENA, RESET\n");
+#endif
     return 0;
 }
 
@@ -51,15 +54,15 @@ varena_init_ex(VArena* arena, size_t size, size_t page_size, size_t alignment)
     void* base = vmem_reserve(size);
 
 #ifdef CCORE_VERBOSE
-    printf("Reserved %zu bytes at %p\n", size, base);
+    printf("CCORE: VARENA, INIT, %zu, %zu, %p\n", size, page_size, base);
 #endif
 
-    arena->base = base;
-    arena->used = 0;
+    arena->base       = base;
+    arena->used       = 0;
     arena->page_count = 0;
-    arena->page_size = page_size;
-    arena->size = size;
-    arena->alignment = alignment;
+    arena->page_size  = page_size;
+    arena->size       = size;
+    arena->alignment  = alignment;
 
     return 0;
 }
@@ -78,7 +81,7 @@ varena_commit_pages(VArena* varena, size_t amount)
     vmem_commit(start, varena->page_size * amount);
 
 #ifdef CCORE_VERBOSE
-    printf("Page committed at %p with size %zu.\n", start, varena->page_size);
+    printf("CCORE: VARENA, COMMIT, %zu, %p\n", varena->page_size, start);
 #endif
     varena->page_count += amount;
     return 0;
@@ -98,8 +101,8 @@ align_forward(uintptr_t ptr, size_t alignment)
 static void
 varena_increase_capacity(VArena* varena, size_t size)
 {
-    size_t end_offset = varena->used + size;
-    size_t committed = varena->page_size * varena->page_count;
+    size_t end_offset   = varena->used + size;
+    size_t committed    = varena->page_size * varena->page_count;
     size_t bytes_needed = end_offset > committed ? end_offset - committed : 0;
     size_t pages_needed =
       (bytes_needed + varena->page_size - 1) / varena->page_size;
@@ -120,10 +123,9 @@ void*
 varena_push(VArena* varena, size_t size)
 {
     size_t start_offset = align_forward(varena->used, varena->alignment);
-    size_t end_offset = start_offset + size;
+    size_t end_offset   = start_offset + size;
 #ifdef CCORE_VERBOSE
-    printf("Allocating %zu bytes in arena.\n", size);
-    printf("Aligned from %zu to %zu.\n", varena->used, start_offset);
+    printf("CCORE: VARENA, PUSH, %zu, %p\n", size, varena->base + varena->used);
 #endif
 
     varena_increase_capacity(varena, end_offset - varena->used);
@@ -140,10 +142,10 @@ varena_push_copy(VArena* arena, const void* data, size_t size)
 void
 arena_init_ex(Arena* arena, void* base, size_t size, size_t alignment)
 {
-    arena->base = base;
-    arena->size = size;
+    arena->base      = base;
+    arena->size      = size;
     arena->alignment = alignment;
-    arena->used = 0;
+    arena->used      = 0;
 }
 
 void
@@ -247,9 +249,9 @@ Allocator
 arena_allocator(Arena* arena)
 {
     return (Allocator){
-        .alloc = arena_alloc_,
+        .alloc   = arena_alloc_,
         .realloc = arena_realloc_,
-        .free = arena_free_,
+        .free    = arena_free_,
         .context = arena,
     };
 }
@@ -258,9 +260,9 @@ Allocator
 varena_allocator(VArena* varena)
 {
     return (Allocator){
-        .alloc = varena_alloc_,
+        .alloc   = varena_alloc_,
         .realloc = varena_realloc_,
-        .free = varena_free_,
+        .free    = varena_free_,
         .context = varena,
     };
 }
@@ -269,9 +271,9 @@ Allocator
 pool_allocator(Pool* pool)
 {
     return (Allocator){
-        .alloc = pool_alloc_,
+        .alloc   = pool_alloc_,
         .realloc = pool_realloc_,
-        .free = pool_free_,
+        .free    = pool_free_,
         .context = pool,
     };
 }
@@ -283,10 +285,10 @@ pool_free_all(Pool* p)
     size_t i;
 
     for (i = 0; i < chunk_count; i++) {
-        void* ptr = &p->base[i * p->chunk_size];
+        void* ptr          = &p->base[i * p->chunk_size];
         PoolFreeNode* node = (PoolFreeNode*)ptr;
-        node->next = p->head;
-        p->head = node;
+        node->next         = p->head;
+        p->head            = node;
     }
 }
 
@@ -307,10 +309,10 @@ pool_init(Pool* pool,
     assert(capacity >= chunk_size &&
            "Backing buffer length is smaller than the chunk size");
 
-    pool->base = (unsigned char*)base;
-    pool->capacity = capacity;
+    pool->base       = (unsigned char*)base;
+    pool->capacity   = capacity;
     pool->chunk_size = chunk_size;
-    pool->head = NULL;
+    pool->head       = NULL;
 
     pool_free_all(pool);
 }
@@ -336,7 +338,7 @@ pool_free(Pool* p, void* ptr)
     PoolFreeNode* node;
 
     void* start = p->base;
-    void* end = &p->base[p->capacity];
+    void* end   = &p->base[p->capacity];
 
     if (ptr == NULL) {
         return;
@@ -348,27 +350,27 @@ pool_free(Pool* p, void* ptr)
     }
 
     printf("Freed %p\n", ptr);
-    node = (PoolFreeNode*)ptr;
+    node       = (PoolFreeNode*)ptr;
     node->next = p->head;
-    p->head = node;
+    p->head    = node;
 }
 
 void*
 array_init(size_t item_size, size_t capacity, Allocator* allocator)
 {
-    size_t size = item_size * capacity + sizeof(ArrayHeader);
+    size_t size         = item_size * capacity + sizeof(ArrayHeader);
     ArrayHeader* header = allocator->alloc(size, allocator->context);
 
     void* ptr = NULL;
     if (header) {
         header->capacity = capacity;
 #ifdef CCORE_VERBOSE
-        printf("Array initialized with capacity %zu\n", capacity);
+        // printf("Array initialized with capacity %zu\n", capacity);
 #endif
-        header->length = 0;
+        header->length    = 0;
         header->item_size = item_size;
         header->allocator = allocator;
-        ptr = header + 1;
+        ptr               = header + 1;
     }
 
     return ptr;
@@ -393,7 +395,7 @@ array_remove(void* arr, size_t idx)
     if (idx == h->length - 1) {
         h->length -= 1;
     } else if (h->length > 1 && idx < h->length) {
-        uintptr_t ptr = (uintptr_t)arr + idx * h->item_size;
+        uintptr_t ptr  = (uintptr_t)arr + idx * h->item_size;
         uintptr_t last = (uintptr_t)arr + (h->length - 1) * h->item_size;
         h->length -= 1;
         memcpy((void*)ptr, (void*)last, h->item_size);
@@ -417,10 +419,10 @@ array_copy(const void* original, Allocator* allocator)
 {
     ArrayHeader original_header = *array_header(original);
     size_t copy_size = original_header.item_size * original_header.length;
-    void* result = array_init(sizeof(uint8_t), copy_size, allocator);
+    void* result     = array_init(sizeof(uint8_t), copy_size, allocator);
     memcpy(result, original, copy_size);
     ArrayHeader* result_header = array_header(result);
-    *result_header = *array_header(original);
+    *result_header             = *array_header(original);
 
     return result;
 }
@@ -455,16 +457,16 @@ array_ensure_capacity(void* arr, size_t added_count)
     }
 
 #ifdef CCORE_VERBOSE
-    printf(
-      "Reallocing array from %zu bytes to %zu bytes.\n", old_size, new_size);
+    // printf(
+    //   "Reallocing array from %zu bytes to %zu bytes.\n", old_size, new_size);
 #endif
 
     if (new_header != old_header) {
 #ifdef CCORE_VERBOSE
-        printf("Copied array (%zu bytes) from %p to %p.\n",
-               old_size,
-               old_header,
-               new_header);
+        // printf("Copied array (%zu bytes) from %p to %p.\n",
+        //        old_size,
+        //        old_header,
+        //        new_header);
 #endif
         memcpy(new_header, old_header, old_size);
     }
@@ -490,7 +492,7 @@ dynstr_from_cstr(const char* cstr, size_t capacity, Allocator* allocator)
     char* arr = array(char, capacity, allocator);
     array_ensure_capacity(arr, len + 1);
     memcpy(arr, cstr, len);
-    arr[len] = '\0';
+    arr[len]                  = '\0';
     array_header(arr)->length = len + 1;
 
     return arr;
@@ -520,13 +522,13 @@ void
 dynstr_set(char* dest, const char* src)
 {
     size_t src_len = dynstr_len(src);
-    int diff = src_len - dynstr_len(dest);
+    int diff       = src_len - dynstr_len(dest);
     if (diff > 0) {
         array_ensure_capacity(dest, diff);
     }
 
     memcpy(dest, src, src_len);
-    dest[src_len] = '\0';
+    dest[src_len]              = '\0';
     array_header(dest)->length = src_len + 1;
 }
 
@@ -543,7 +545,7 @@ void
 dynstr_clear(char* str)
 {
     array_header(str)->length = 1;
-    str[0] = '\0';
+    str[0]                    = '\0';
 }
 
 ByteString
@@ -574,7 +576,7 @@ uint64_t
 bytes_hash(const u8* key, size_t length)
 {
     uint64_t hash = FNV_OFFSET;
-    size_t i = 0;
+    size_t i      = 0;
     for (i = 0; i < length; i++) {
         hash ^= (uint64_t)(unsigned char)(key[i]);
         hash *= FNV_PRIME;
@@ -587,8 +589,8 @@ hashmap_clear(Hashmap* hashmap)
 {
     size_t i = 0;
     for (i = 0; i < hashmap->capacity; i++) {
-        hashmap->records[i].type = HASHMAP_RECORD_EMPTY;
-        hashmap->records[i].key = NULL;
+        hashmap->records[i].type  = HASHMAP_RECORD_EMPTY;
+        hashmap->records[i].key   = NULL;
         hashmap->records[i].value = NULL;
     }
     hashmap->length = 0;
@@ -603,14 +605,14 @@ hashmap_init(Hashmap* hashmap,
 {
     hashmap->records =
       allocator->alloc(sizeof(HashmapRecord) * capacity, allocator->context);
-    hashmap->capacity = capacity;
-    hashmap->length = 0;
-    hashmap->hash_fn = hash_fn;
+    hashmap->capacity  = capacity;
+    hashmap->length    = 0;
+    hashmap->hash_fn   = hash_fn;
     hashmap->equals_fn = equals_fn;
-    size_t i = 0;
+    size_t i           = 0;
     for (i = 0; i < hashmap->capacity; i++) {
-        hashmap->records[i].type = HASHMAP_RECORD_EMPTY;
-        hashmap->records[i].key = NULL;
+        hashmap->records[i].type  = HASHMAP_RECORD_EMPTY;
+        hashmap->records[i].key   = NULL;
         hashmap->records[i].value = NULL;
     }
 }
@@ -637,14 +639,14 @@ hashmap_byte_string_init(Hashmap* hashmap,
 {
     hashmap->records =
       allocator->alloc(sizeof(HashmapRecord) * capacity, allocator->context);
-    hashmap->capacity = capacity;
-    hashmap->length = 0;
-    hashmap->hash_fn = byte_string_hash;
+    hashmap->capacity  = capacity;
+    hashmap->length    = 0;
+    hashmap->hash_fn   = byte_string_hash;
     hashmap->equals_fn = byte_string_equal;
-    size_t i = 0;
+    size_t i           = 0;
     for (i = 0; i < hashmap->capacity; i++) {
-        hashmap->records[i].type = HASHMAP_RECORD_EMPTY;
-        hashmap->records[i].key = NULL;
+        hashmap->records[i].type  = HASHMAP_RECORD_EMPTY;
+        hashmap->records[i].key   = NULL;
         hashmap->records[i].value = NULL;
     }
 }
@@ -655,7 +657,7 @@ hashmap_insert(Hashmap* hashmap, void* key, void* value)
     if (value == NULL)
         return false;
 
-    u16 idx = hashmap->hash_fn(key) % hashmap->capacity;
+    u16 idx  = hashmap->hash_fn(key) % hashmap->capacity;
     size_t i = 0;
     for (i = 0; i < hashmap->capacity; i++) {
         HashmapRecord* record =
@@ -663,9 +665,9 @@ hashmap_insert(Hashmap* hashmap, void* key, void* value)
 
         if (record->type == HASHMAP_RECORD_EMPTY ||
             record->type == HASHMAP_RECORD_DELETED) {
-            record->key = key;
+            record->key   = key;
             record->value = value;
-            record->type = HASHMAP_RECORD_FILLED;
+            record->type  = HASHMAP_RECORD_FILLED;
             hashmap->length++;
             return 0;
         } else if (record->type == HASHMAP_RECORD_FILLED &&
@@ -683,7 +685,7 @@ hashmap_get(Hashmap* hashmap, void* key)
     u16 hash = hashmap->hash_fn(key) % hashmap->capacity;
     size_t i = 0;
     for (i = 0; i < hashmap->capacity; i++) {
-        u16 idx = (hash + i) % hashmap->capacity;
+        u16 idx               = (hash + i) % hashmap->capacity;
         HashmapRecord* record = &hashmap->records[idx];
         if (record->type == HASHMAP_RECORD_EMPTY) {
             return NULL;
@@ -706,7 +708,7 @@ hashmap_byte_string_get(Hashmap* hashmap, ByteString key)
     u16 hash = byte_string_hash(&key) % hashmap->capacity;
     size_t i = 0;
     for (i = 0; i < hashmap->capacity; i++) {
-        u16 idx = (hash + i) % hashmap->capacity;
+        u16 idx               = (hash + i) % hashmap->capacity;
         HashmapRecord* record = &hashmap->records[idx];
         if (record->type == HASHMAP_RECORD_EMPTY) {
             return NULL;
@@ -729,7 +731,7 @@ hashmap_delete(Hashmap* hashmap, void* key)
     u16 hash = hashmap->hash_fn(key) % hashmap->capacity;
     size_t i = 0;
     for (i = 0; i < hashmap->capacity; i++) {
-        u16 idx = (hash + i) % hashmap->capacity;
+        u16 idx               = (hash + i) % hashmap->capacity;
         HashmapRecord* record = &hashmap->records[idx];
         if (record->type == HASHMAP_RECORD_EMPTY) {
             return NULL;
@@ -739,9 +741,9 @@ hashmap_delete(Hashmap* hashmap, void* key)
         }
 
         if (hashmap->equals_fn(key, record->key)) {
-            void* temp = record->value;
-            record->type = HASHMAP_RECORD_DELETED;
-            record->key = NULL;
+            void* temp    = record->value;
+            record->type  = HASHMAP_RECORD_DELETED;
+            record->key   = NULL;
             record->value = NULL;
             return temp;
         }
