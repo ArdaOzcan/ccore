@@ -14,6 +14,29 @@
 #include <unistd.h>
 #endif
 
+/* CSV Header:
+ * Type,Function,BaseAddress,AllocAddress,Size,Used,Committed,Capacity,ExtraInfo
+ */
+#define CSV_LOG_POOL(pool_, func_, alloc_ptr_, alloc_size_, extra_)            \
+    printf("POOL,%s,%p,%p,%zu,%zu,%zu,%zu,%s\n",                               \
+           (func_),                                                            \
+           (pool_)->base,                                                      \
+           (alloc_ptr_),                                                       \
+           (size_t)(alloc_size_),                                              \
+           (size_t)0,                                                          \
+           (pool_)->capacity,                                                  \
+           (pool_)->capacity,                                                  \
+           (extra_))
+#define CSV_LOG_BUDDY(buddy_, func_, alloc_ptr_, alloc_size_, extra_)          \
+    printf("BUDDY,%s,%p,%p,%zu,%zu,%zu,%zu,%s\n",                              \
+           (func_),                                                            \
+           (buddy_)->head,                                                     \
+           (alloc_ptr_),                                                       \
+           (size_t)(alloc_size_),                                              \
+           (size_t)0,                                                          \
+           (intptr_t)(buddy_)->tail - (intptr_t)(buddy_)->head,                \
+           (intptr_t)(buddy_)->tail - (intptr_t)(buddy_)->head,                \
+           (extra_))
 #define CSV_LOG_VARENA(func, alloc_ptr, size_, extra)                          \
     printf("VARENA,%s,%p,%p,%zu,%zu,%zu,%zu,%s\n",                             \
            (func),                                                             \
@@ -327,7 +350,8 @@ static void*
 buddy_realloc_(void* start, size_t old_size, size_t new_size, void* context)
 {
 #ifdef CCORE_VERBOSE
-    printf("Buddy allocator realloc called for %p (%lu bytes to %lu bytes)\n",
+    printf("Buddy allocator realloc called for %p (%lu bytes to %lu "
+           "bytes)\n",
            start,
            old_size,
            new_size);
@@ -344,7 +368,9 @@ buddy_realloc_(void* start, size_t old_size, size_t new_size, void* context)
     }
 
     buddy_allocator_free(buddy_allocator, start);
-    void* new_start     = buddy_allocator_alloc(buddy_allocator, new_size);
+    void* new_start = buddy_allocator_alloc(buddy_allocator, new_size);
+    if (new_start == NULL)
+        return NULL;
     size_t smaller_size = old_size > new_size ? new_size : old_size;
     memcpy(new_start, start, smaller_size);
     return new_start;
@@ -429,6 +455,9 @@ pool_init(Pool* pool,
     pool->capacity   = capacity;
     pool->chunk_size = chunk_size;
     pool->head       = NULL;
+#ifdef CCORE_VERBOSE
+    CSV_LOG_POOL(pool, "INIT", pool->base, pool->capacity, "");
+#endif
 
     pool_free_all(pool);
 }
@@ -439,12 +468,14 @@ pool_allocate(Pool* p)
     PoolFreeNode* node = p->head;
 
     if (node == NULL) {
-        assert(0 && "Pool allocator has no free memory");
+        fprintf(stderr, "Pool allocator has no free memory\n");
         return NULL;
     }
 
     p->head = p->head->next;
-    printf("Allocated %p\n", node);
+#ifdef CCORE_VERBOSE
+    CSV_LOG_POOL(p, "ALLOC", node, p->chunk_size, "");
+#endif
     return memset(node, 0, p->chunk_size);
 }
 
@@ -465,10 +496,12 @@ pool_free(Pool* p, void* ptr)
         return;
     }
 
-    printf("Freed %p\n", ptr);
     node       = (PoolFreeNode*)ptr;
     node->next = p->head;
     p->head    = node;
+#ifdef CCORE_VERBOSE
+    CSV_LOG_POOL(p, "FREE", ptr, p->chunk_size, "");
+#endif
 }
 
 static BuddyBlock*
@@ -509,7 +542,8 @@ buddy_block_find_best(BuddyBlock* head, BuddyBlock* tail, size_t size)
     }
 
     while (block < tail && buddy < tail) {
-        /* Merge empty buddies with same size, reduces fragmentation */
+        /* Merge empty buddies with same size, reduces fragmentation
+         */
         if (block->is_free && buddy->is_free && block->size == buddy->size) {
             block->size <<= 1;
             if (size <= block->size &&
@@ -562,7 +596,7 @@ is_power_of_two(size_t x)
 }
 
 void
-buddy_allocator_init(BuddyAllocator* b,
+buddy_allocator_init(BuddyAllocator* buddy,
                      void* data,
                      size_t size,
                      size_t alignment)
@@ -578,13 +612,17 @@ buddy_allocator_init(BuddyAllocator* b,
     assert((uintptr_t)data % alignment == 0 &&
            "data is not aligned to minimum alignment");
 
-    b->head          = (BuddyBlock*)data;
-    b->head->size    = size;
-    b->head->is_free = true;
+    buddy->head          = (BuddyBlock*)data;
+    buddy->head->size    = size;
+    buddy->head->is_free = true;
 
-    b->tail = buddy_block_next(b->head);
+    buddy->tail = buddy_block_next(buddy->head);
 
-    b->alignment = alignment;
+    buddy->alignment = alignment;
+
+#ifdef CCORE_VERBOSE
+    CSV_LOG_BUDDY(buddy, "INIT", buddy->head, size, "");
+#endif
 }
 
 static size_t
@@ -637,55 +675,54 @@ buddy_block_coalescence(BuddyBlock* head, BuddyBlock* tail)
 }
 
 void*
-buddy_allocator_alloc(BuddyAllocator* b, size_t size)
+buddy_allocator_alloc(BuddyAllocator* buddy, size_t size)
 {
 #ifdef CCORE_VERBOSE
     printf("Buddy allocator allocate called %lu bytes\n", size);
 #endif
     if (size != 0) {
-        size_t actual_size = buddy_block_size_required(b, size);
+        size_t actual_size = buddy_block_size_required(buddy, size);
 
         BuddyBlock* found =
-          buddy_block_find_best(b->head, b->tail, actual_size);
+          buddy_block_find_best(buddy->head, buddy->tail, actual_size);
         if (found == NULL) {
-            buddy_block_coalescence(b->head, b->tail);
-            found = buddy_block_find_best(b->head, b->tail, actual_size);
+            buddy_block_coalescence(buddy->head, buddy->tail);
+            found =
+              buddy_block_find_best(buddy->head, buddy->tail, actual_size);
         }
 
         if (found != NULL) {
             found->is_free = false;
 #ifdef CCORE_VERBOSE
-            printf("Found a block with size %lu and address %p.\n",
-                   found->size,
-                   found);
+            CSV_LOG_BUDDY(buddy, "ALLOC", found, found->size, "");
 #endif
-            return (void*)((char*)found + b->alignment);
+            return (void*)((char*)found + buddy->alignment);
         }
     }
 
 #ifdef CCORE_VERBOSE
-    fprintf(
-      stderr,
-      "No block with sufficient size was found. Size requested: %lu bytes.\n",
-      size);
+    fprintf(stderr,
+            "No block with sufficient size was found. Size "
+            "requested: %lu bytes.\n",
+            size);
 #endif
 
     return NULL;
 }
 
 void
-buddy_allocator_free(BuddyAllocator* b, void* data)
+buddy_allocator_free(BuddyAllocator* buddy, void* data)
 {
     if (data != NULL) {
         BuddyBlock* block;
 
-        assert((uintptr_t)b->head <= (uintptr_t)data);
-        assert((uintptr_t)data < (uintptr_t)b->tail);
+        assert((uintptr_t)buddy->head <= (uintptr_t)data);
+        assert((uintptr_t)data < (uintptr_t)buddy->tail);
 
-        block          = (BuddyBlock*)((char*)data - b->alignment);
+        block          = (BuddyBlock*)((char*)data - buddy->alignment);
         block->is_free = true;
 #ifdef CCORE_VERBOSE
-        printf("Block %p with size %lu freed.\n", block, block->size);
+        CSV_LOG_BUDDY(buddy, "FREE", block, block->size, "");
 #endif
     }
 }
@@ -700,7 +737,8 @@ array_init(size_t item_size, size_t capacity, Allocator* allocator)
     if (header) {
         header->capacity = capacity;
 #ifdef CCORE_VERBOSE
-        /* printf("Array initialized with capacity %zu\n", capacity); */
+        /* printf("Array initialized with capacity %zu\n", capacity);
+         */
 #endif
         header->length    = 0;
         header->item_size = item_size;
@@ -787,7 +825,8 @@ array_ensure_capacity(void* arr, size_t added_count)
 
 #ifdef CCORE_VERBOSE
     /* printf(
-       "Reallocing array from %zu bytes to %zu bytes.\n", old_size, new_size);
+       "Reallocing array from %zu bytes to %zu bytes.\n", old_size,
+       new_size);
      */
 #endif
     ArrayHeader* new_header = old_header->allocator->realloc(
@@ -884,7 +923,8 @@ byte_string_from_cstr(const char* str)
 #define FNV_PRIME 1099511628211UL
 
 /* From: https://benhoyt.com/writings/hash-table-in-c/
-   Return 64-bit FNV-1a hash for key (NUL-terminated). See description:
+   Return 64-bit FNV-1a hash for key (NUL-terminated). See
+   description:
    https://en.wikipedia.org/wiki/Fowler–Noll–Vo_hash_function */
 uint64_t
 cstr_hash(const char* key)
